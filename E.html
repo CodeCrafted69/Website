@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Modern Calendar</title>
+    <style>
+        /* Light Theme (Default) */
+        :root {
+            --primary-color: #0f172a;
+            --accent-color: #3b82f6;
+            --accent-hover: #2563eb;
+            --bg-color: #f8fafc;
+            --surface-color: #ffffff;
+            --surface-hover: #f1f5f9;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --danger-color: #ef4444;
+            --danger-hover: #fee2e2;
+            --success-color: #10b981;
+            --holiday-color: #8b5cf6;
+            --radius-md: 12px;
+            --radius-sm: 8px;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Dark Theme Variables */
+        [data-theme="dark"] {
+            --primary-color: #f8fafc;
+            --accent-color: #3b82f6;
+            --accent-hover: #60a5fa;
+            --bg-color: #0f172a;
+            --surface-color: #1e293b;
+            --surface-hover: #334155;
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+            --border-color: #334155;
+            --danger-color: #f87171;
+            --danger-hover: #451a1a;
+            --holiday-color: #a78bfa;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease; }
+        body { background-color: var(--bg-color); color: var(--text-main); display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+
+        #calendar-container { width: 100%; max-width: 1000px; background-color: var(--surface-color); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); overflow: hidden; }
+        #calendar-header { display: flex; justify-content: space-between; align-items: center; padding: 24px; border-bottom: 1px solid var(--border-color); }
+        .header-controls { display: flex; gap: 12px; align-items: center; }
+        #month-display { font-size: 1.5rem; font-weight: 700; color: var(--primary-color); min-width: 200px; text-align: center; }
+
+        .nav-btn, .icon-btn { background: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 8px 16px; cursor: pointer; font-size: 1rem; color: var(--text-main); font-weight: 500; }
+        .icon-btn { padding: 8px 12px; display: flex; align-items: center; justify-content: center; }
+        .nav-btn:hover, .icon-btn:hover { background-color: var(--surface-hover); }
+
+        #weekdays { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-weight: 600; font-size: 0.85rem; color: var(--text-muted); padding: 16px 0 8px 0; text-transform: uppercase; letter-spacing: 0.5px; }
+        #calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background-color: var(--border-color); border-top: 1px solid var(--border-color); }
+
+        .day { background-color: var(--surface-color); min-height: 130px; padding: 10px; cursor: pointer; display: flex; flex-direction: column; overflow: hidden; }
+        .day:hover { background-color: var(--surface-hover); }
+        .day-header { display: flex; justify-content: space-between; align-items: flex-start; }
+        .day-number { font-weight: 500; margin-bottom: 5px; display: inline-block; width: 28px; height: 28px; line-height: 28px; text-align: center; border-radius: 50%; }
+        .day.current-day .day-number { background-color: var(--accent-color); color: white; font-weight: bold; }
+        .day.padding { background-color: var(--bg-color); color: var(--border-color); cursor: default; }
+        .day.past-day { opacity: 0.7; }
+        .dynamic-time { font-size: 0.7rem; color: var(--text-muted); font-weight: 600; padding-top: 5px; text-align: right; }
+
+        .event-indicator { background-color: var(--accent-color); color: white; font-size: 0.75rem; padding: 4px 6px; border-radius: 4px; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; justify-content: space-between; }
+        .event-indicator.holiday { background-color: var(--holiday-color); }
+        .event-time-sm { opacity: 0.8; font-size: 0.7rem; margin-left: 4px; }
+        .more-events { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; text-align: center; font-weight: 500; }
+
+        /* Modals */
+        .modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); z-index: 10; }
+        .modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: var(--surface-color); width: 90%; max-width: 480px; max-height: 85vh; overflow-y: auto; border-radius: var(--radius-md); box-shadow: var(--shadow-lg); z-index: 20; padding: 24px; border: 1px solid var(--border-color); }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; color: var(--primary-color); }
+        .modal-header h2 { font-size: 1.25rem; }
+        .close-btn { background: none; border: none; font-size: 1.5rem; color: var(--text-muted); cursor: pointer; }
+
+        .event-list { margin-bottom: 20px; max-height: 200px; overflow-y: auto; }
+        .event-item { display: flex; justify-content: space-between; align-items: center; background-color: var(--bg-color); padding: 12px; border-radius: var(--radius-sm); margin-bottom: 8px; border: 1px solid var(--border-color); }
+        .event-item.holiday { border-left: 4px solid var(--holiday-color); }
+        .event-info { display: flex; flex-direction: column; gap: 4px; }
+        .event-title { font-weight: 500; font-size: 0.95rem; }
+        .event-time-lg { font-size: 0.8rem; color: var(--text-muted); }
+
+        .action-btns { display: flex; gap: 4px; }
+        .action-btn { background: none; border: none; cursor: pointer; padding: 6px; border-radius: 4px; }
+        .delete-btn { color: var(--danger-color); }
+        .delete-btn:hover { background-color: var(--danger-hover); }
+        .edit-btn { color: var(--accent-color); }
+        .edit-btn:hover { background-color: var(--surface-hover); }
+
+        .input-group { display: flex; gap: 12px; margin-bottom: 16px; width: 100%; }
+        .input-group input[type="text"], .input-group input[type="time"], .input-group select, .input-group textarea { padding: 10px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-size: 0.95rem; background-color: var(--bg-color); color: var(--text-main); outline: none; width: 100%; }
+        .input-group input:focus, .input-group select:focus, .input-group textarea:focus { border-color: var(--accent-color); }
+        #event-title { flex: 1; }
+        #event-time { width: 130px; }
+
+        .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border-color); flex-wrap: wrap; }
+        .setting-row:last-child { border-bottom: none; }
+        .setting-info { flex: 1; min-width: 200px; }
+        .setting-info h4 { font-size: 0.95rem; margin-bottom: 2px; color: var(--text-main); }
+        .setting-info p { font-size: 0.8rem; color: var(--text-muted); }
+        .sub-setting { width: 100%; margin-top: 10px; padding-left: 15px; border-left: 2px solid var(--border-color); display: none; }
+        .sub-setting.active { display: block; }
+        .detected-notice { font-size: 0.8rem; color: var(--success-color); margin-top: 4px; font-weight: 500; }
+        
+        .checkbox-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+        .checkbox-label { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; color: var(--text-main); cursor: pointer;}
+        
+        .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--text-muted); transition: .3s; border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--accent-color); }
+        input:checked + .slider:before { transform: translateX(20px); }
+
+        .btn-group { display: flex; gap: 12px; margin-top: 16px; flex-wrap: wrap; justify-content: center; }
+        .btn { padding: 10px 16px; border-radius: var(--radius-sm); cursor: pointer; font-weight: 500; font-size: 0.9rem; border: none; text-align: center; flex: 1; }
+        .btn-primary { background-color: var(--accent-color); color: white; }
+        .btn-primary:hover { background-color: var(--accent-hover); }
+        .btn-outline { background-color: transparent; border: 1px solid var(--border-color); color: var(--text-main); }
+        .btn-outline:hover { background-color: var(--surface-hover); }
+        .btn-danger { background-color: transparent; border: 1px solid var(--danger-color); color: var(--danger-color); }
+        .btn-danger:hover { background-color: var(--danger-hover); }
+        
+        #custom-dialog-box { z-index: 9999; text-align: center; }
+        #custom-dialog-box h2 { margin-bottom: 12px; color: var(--primary-color); }
+        #custom-dialog-box p { margin-bottom: 15px; font-size: 0.95rem; color: var(--text-muted); line-height: 1.5; }
+        #dialog-custom-html { margin-bottom: 20px; text-align: left; }
+    </style>
+</head>
+<body>
+
+    <div id="calendar-container">
+        <div id="calendar-header">
+            <div class="header-controls">
+                <button id="prev-btn" class="nav-btn">‹</button>
+                <button id="today-btn" class="nav-btn">Today</button>
+            </div>
+            <div id="month-display"></div>
+            <div class="header-controls">
+                <button id="next-btn" class="nav-btn">›</button>
+                <button id="settings-btn" class="icon-btn" title="Settings">⚙️</button>
+            </div>
+        </div>
+        <div id="weekdays">
+            <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+        </div>
+        <div id="calendar-grid"></div>
+    </div>
+
+    <div id="modal-backdrop" class="modal-backdrop"></div>
+
+    <!-- Event Modal -->
+    <div id="event-modal" class="modal">
+        <div class="modal-header">
+            <h2 id="modal-date-title"></h2>
+            <button class="close-btn" onclick="closeModals()">×</button>
+        </div>
+        <div id="existing-events" class="event-list"></div>
+        <div id="event-creation-area">
+            <div class="input-group">
+                <input type="text" id="event-title" placeholder="Event title...">
+                <input type="time" id="event-time" title="Optional Time">
+            </div>
+            <div class="input-group" style="margin-bottom: 20px; align-items: center;">
+                <label class="checkbox-label"><input type="checkbox" id="event-yearly"> 🔁 Repeat this event every year</label>
+            </div>
+            <div class="btn-group">
+                <button onclick="closeModals()" class="btn btn-outline">Cancel</button>
+                <button id="save-event-btn" onclick="saveEvent()" class="btn btn-primary">Save Event</button>
+            </div>
+        </div>
+        <div id="past-date-warning" style="display:none; color: var(--danger-color); font-size: 0.9rem; text-align: center; margin-top: 10px;">
+            ⚠️ Cannot add new events to past dates.
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-header">
+            <h2>Settings</h2>
+            <button class="close-btn" onclick="closeModals()">×</button>
+        </div>
+
+        <div class="setting-row">
+            <div class="setting-info"><h4>Dark Mode</h4><p>Toggle dark appearance</p></div>
+            <label class="switch"><input type="checkbox" id="dark-mode-toggle"><span class="slider"></span></label>
+        </div>
+        <div class="setting-row">
+            <div class="setting-info"><h4>Dynamic Times</h4><p>Show current time & countdowns</p></div>
+            <label class="switch"><input type="checkbox" id="time-display-toggle"><span class="slider"></span></label>
+        </div>
+        <div class="setting-row">
+            <div class="setting-info"><h4>Event Notifications</h4><p>Get notified when events start</p></div>
+            <label class="switch"><input type="checkbox" id="notification-toggle"><span class="slider"></span></label>
+        </div>
+        <div class="setting-row">
+            <div class="setting-info"><h4>Auto-Cleanup Past Events</h4><p>Automatically delete old events</p></div>
+            <label class="switch"><input type="checkbox" id="auto-cleanup-toggle"><span class="slider"></span></label>
+            <div class="sub-setting" id="auto-cleanup-options">
+                <div class="input-group"><select id="cleanup-delay"><option value="0">Delete immediately (Midnight)</option><option value="1">Delete after 1 Day</option><option value="7">Delete after 1 Week</option></select></div>
+            </div>
+        </div>
+        <div class="setting-row">
+            <div class="setting-info"><h4>Holidays & Celebrations</h4><p>Show events for your region</p></div>
+            <label class="switch"><input type="checkbox" id="holiday-toggle"><span class="slider"></span></label>
+            <div class="sub-setting" id="holiday-options">
+                <div class="input-group"><select id="holiday-country"><option value="US">United States</option><option value="GB">United Kingdom</option><option value="CA">Canada</option><option value="AU">Australia</option><option value="IE">Ireland</option></select></div>
+                <div id="detected-country-text" class="detected-notice"></div>
+                <div class="input-group" style="margin-top: 10px;"><select id="holiday-scope"><option value="main">Main Holidays (No Bank Holidays)</option><option value="all">All Public & Cultural Holidays</option><option value="custom">Custom Selection...</option></select></div>
+                <div id="custom-holidays-list" class="checkbox-grid" style="display: none; padding: 10px; background: var(--bg-color); border-radius: var(--radius-sm); border: 1px solid var(--border-color);"></div>
+            </div>
+        </div>
+
+        <div style="margin-top: 24px; border-top: 1px solid var(--border-color); padding-top: 16px;">
+            <h4 style="margin-bottom: 12px; font-size: 1rem; color: var(--primary-color);">Data Management (Clean Export)</h4>
+            <div class="input-group">
+                <select id="data-action" onchange="toggleDataUI()"><option value="export">Export Data</option><option value="import">Import Data</option></select>
+                <select id="data-scope">
+                    <option value="both">Events & Settings</option>
+                    <option value="events">Events Only</option>
+                    <option value="settings">Settings Only</option>
+                </select>
+                <select id="data-method" onchange="toggleDataUI()"><option value="text">Raw Text</option><option value="file">File (.json)</option></select>
+            </div>
+            <div id="export-text-ui" style="display: block;">
+                <textarea id="export-textarea" rows="3" readonly placeholder="Click Generate..." style="background: var(--surface-hover);"></textarea>
+                <div class="btn-group" style="margin-top: 8px;">
+                    <button onclick="generateExportText()" class="btn btn-outline">Generate</button>
+                    <button onclick="copyExportText()" class="btn btn-primary">Copy</button>
+                </div>
+            </div>
+            <div id="export-file-ui" style="display: none;"><button onclick="downloadExportFileDirectly()" class="btn btn-primary" style="width: 100%;">Download JSON File</button></div>
+            <div id="import-text-ui" style="display: none;">
+                <textarea id="import-textarea" rows="3" placeholder="Paste JSON data here..."></textarea>
+                <button onclick="processImportText()" class="btn btn-primary" style="width: 100%; margin-top: 8px;">Import Text</button>
+            </div>
+            <div id="import-file-ui" style="display: none;">
+                <input type="file" id="import-file-input" accept=".json" style="margin-bottom: 8px;">
+                <button onclick="processImportFile()" class="btn btn-primary" style="width: 100%;">Import File</button>
+            </div>
+            <button onclick="openRecoveryModal()" class="btn btn-outline" style="width: 100%; margin-top: 16px;">Recover Deleted Events</button>
+            <button onclick="handleDeleteAll()" class="btn btn-danger" style="width: 100%; margin-top: 8px;">Delete All Events</button>
+        </div>
+    </div>
+
+    <!-- Recovery Modal -->
+    <div id="recovery-modal" class="modal">
+        <div class="modal-header">
+            <h2>Deleted Events</h2>
+            <button class="close-btn" onclick="closeModals()">×</button>
+        </div>
+        <div class="btn-group" style="margin-bottom: 16px;">
+            <button onclick="recoverAllEvents()" class="btn btn-primary">Recover All</button>
+            <button onclick="permanentlyDeleteAll()" class="btn btn-danger">Delete All</button>
+        </div>
+        <div id="deleted-events-list" class="event-list" style="max-height: 350px;"></div>
+    </div>
+
+    <!-- Custom Dialog Modal -->
+    <div id="custom-dialog-backdrop" class="modal-backdrop" style="z-index: 100;"></div>
+    <div id="custom-dialog-box" class="modal">
+        <h2 id="dialog-title">Title</h2>
+        <p id="dialog-message">Message</p>
+        <div id="dialog-custom-html"></div>
+        <div id="dialog-buttons" class="btn-group"></div>
+    </div>
+
+    <script>
+        // --- Enhanced Custom Dialog System ---
+        function showDialog(title, message, buttons, htmlContent = '') {
+            return new Promise((resolve) => {
+                document.getElementById('dialog-title').innerText = title;
+                document.getElementById('dialog-message').innerText = message;
+                document.getElementById('dialog-custom-html').innerHTML = htmlContent;
+                
+                const btnContainer = document.getElementById('dialog-buttons');
+                btnContainer.innerHTML = '';
+                
+                buttons.forEach(btn => {
+                    const buttonEl = document.createElement('button');
+                    buttonEl.className = `btn ${btn.class || 'btn-outline'}`;
+                    buttonEl.innerText = btn.text;
+                    buttonEl.onclick = () => {
+                        document.getElementById('custom-dialog-backdrop').style.display = 'none';
+                        document.getElementById('custom-dialog-box').style.display = 'none';
+                        resolve(btn.value);
+                    };
+                    btnContainer.appendChild(buttonEl);
+                });
+
+                document.getElementById('custom-dialog-backdrop').style.display = 'block';
+                document.getElementById('custom-dialog-box').style.display = 'block';
+            });
+        }
+        const customAlert = (title, message) => showDialog(title, message, [{text: 'OK', value: true, class: 'btn-primary'}]);
+        const customConfirm = (title, message) => showDialog(title, message, [{text: 'Cancel', value: false, class: 'btn-outline'}, {text: 'Confirm', value: true, class: 'btn-danger'}]);
+
+        // --- Core State ---
+        let nav = 0; 
+        let clickedDate = null; 
+        let editingEventId = null;
+        let editingEventDate = null;
+        let fetchedHolidays = {}; 
+        let isCountryAutoDetected = false;
+        let notifiedEvents = new Set();
+        let events = JSON.parse(localStorage.getItem('calendarEvents')) || {};
+        let deletedEvents = JSON.parse(localStorage.getItem('calendarDeletedEvents')) || [];
+        
+        const STRICT_MAIN_HOLIDAYS = ["New Year's Day", "New Year's Eve", "Valentine's Day", "St. Patrick's Day", "Easter Sunday", "Mother's Day", "Father's Day", "Halloween", "Thanksgiving", "Christmas Eve", "Christmas Day", "Boxing Day"];
+        const defaultSettings = { darkMode: false, showDynamicTimes: true, notifications: false, autoCleanup: false, cleanupDelay: 1, showHolidays: false, holidayCountry: 'GB', holidayScope: 'main', customHolidays: STRICT_MAIN_HOLIDAYS.slice() };
+        let savedSettings = JSON.parse(localStorage.getItem('calendarSettings')) || {};
+        let settings = { ...defaultSettings, ...savedSettings };
+
+        const calendarGrid = document.getElementById('calendar-grid');
+        const monthDisplay = document.getElementById('month-display');
+
+        // --- Utility ---
+        function getLocalDateString(dateObj) {
+            const tzOffset = dateObj.getTimezoneOffset() * 60000;
+            return (new Date(dateObj - tzOffset)).toISOString().split('T')[0];
+        }
+
+        function downloadJsonFile(stringData, filename) {
+            const blob = new Blob([stringData], { type: 'application/json' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+            a.download = `${filename}.json`; a.click();
+        }
+
+        // --- Init & Settings ---
+        async function initApp() {
+            bindSettingsDOM(); applySettingsUI(); applyTheme(); toggleDataUI();
+            if (settings.showHolidays && !isCountryAutoDetected) await detectLocation();
+            runAutoCleanup(); await loadCalendar();
+            
+            // Core Loop for time and notifications
+            setInterval(() => {
+                updateDynamicTimesUI();
+                checkNotifications();
+            }, 1000);
+        }
+
+        async function detectLocation() {
+            try {
+                const res = await fetch('https://ipapi.co/json/');
+                if (!res.ok) return;
+                const data = await res.json();
+                if (data.country_code) {
+                    const select = document.getElementById('holiday-country');
+                    if (Array.from(select.options).some(opt => opt.value === data.country_code)) {
+                        settings.holidayCountry = data.country_code; isCountryAutoDetected = true;
+                        document.getElementById('detected-country-text').innerText = `🌍 Auto-detected: ${data.country_name}`;
+                        select.value = data.country_code; saveSettings();
+                    }
+                }
+            } catch (err) {}
+        }
+
+        function bindSettingsDOM() {
+            document.getElementById('dark-mode-toggle').addEventListener('change', e => { settings.darkMode = e.target.checked; applyTheme(); saveSettings(); });
+            document.getElementById('time-display-toggle').addEventListener('change', e => { settings.showDynamicTimes = e.target.checked; saveSettings(); loadCalendar(); });
+            
+            // Notification Toggle with Permission Check
+            document.getElementById('notification-toggle').addEventListener('change', async e => {
+                if (e.target.checked) {
+                    if (!("Notification" in window)) {
+                        customAlert("Not Supported", "Your browser does not support notifications.");
+                        e.target.checked = false; return;
+                    }
+                    const permission = await Notification.requestPermission();
+                    if (permission !== 'granted') {
+                        customAlert("Permission Denied", "Please allow notifications in your browser settings to use this feature.");
+                        e.target.checked = false; return;
+                    }
+                }
+                settings.notifications = e.target.checked;
+                saveSettings();
+            });
+
+            document.getElementById('auto-cleanup-toggle').addEventListener('change', e => { settings.autoCleanup = e.target.checked; document.getElementById('auto-cleanup-options').classList.toggle('active', settings.autoCleanup); runAutoCleanup(); loadCalendar(); saveSettings(); });
+            document.getElementById('cleanup-delay').addEventListener('change', e => { settings.cleanupDelay = e.target.value; runAutoCleanup(); loadCalendar(); saveSettings(); });
+            document.getElementById('holiday-toggle').addEventListener('change', async e => { settings.showHolidays = e.target.checked; document.getElementById('holiday-options').classList.toggle('active', settings.showHolidays); if(settings.showHolidays && !isCountryAutoDetected) await detectLocation(); await loadCalendar(); saveSettings(); });
+            document.getElementById('holiday-country').addEventListener('change', async e => { settings.holidayCountry = e.target.value; document.getElementById('detected-country-text').innerText = ''; await loadCalendar(); saveSettings(); });
+            document.getElementById('holiday-scope').addEventListener('change', async e => { settings.holidayScope = e.target.value; document.getElementById('custom-holidays-list').style.display = (settings.holidayScope === 'custom') ? 'grid' : 'none'; await loadCalendar(); saveSettings(); });
+            renderCustomHolidayCheckboxes();
+        }
+
+        function renderCustomHolidayCheckboxes() {
+            const container = document.getElementById('custom-holidays-list');
+            container.innerHTML = '';
+            STRICT_MAIN_HOLIDAYS.forEach(hol => {
+                const label = document.createElement('label'); label.className = 'checkbox-label';
+                const isChecked = settings.customHolidays.includes(hol) ? 'checked' : '';
+                label.innerHTML = `<input type="checkbox" value="${hol}" ${isChecked}> ${hol}`;
+                label.querySelector('input').addEventListener('change', async (e) => {
+                    if (e.target.checked) settings.customHolidays.push(hol);
+                    else settings.customHolidays = settings.customHolidays.filter(h => h !== hol);
+                    saveSettings(); await loadCalendar();
+                });
+                container.appendChild(label);
+            });
+        }
+
+        function applySettingsUI() {
+            document.getElementById('dark-mode-toggle').checked = settings.darkMode;
+            document.getElementById('time-display-toggle').checked = settings.showDynamicTimes;
+            document.getElementById('notification-toggle').checked = settings.notifications;
+            document.getElementById('auto-cleanup-toggle').checked = settings.autoCleanup;
+            document.getElementById('auto-cleanup-options').classList.toggle('active', settings.autoCleanup);
+            document.getElementById('cleanup-delay').value = settings.cleanupDelay;
+            document.getElementById('holiday-toggle').checked = settings.showHolidays;
+            document.getElementById('holiday-options').classList.toggle('active', settings.showHolidays);
+            document.getElementById('holiday-country').value = settings.holidayCountry;
+            document.getElementById('holiday-scope').value = settings.holidayScope;
+            document.getElementById('custom-holidays-list').style.display = (settings.holidayScope === 'custom') ? 'grid' : 'none';
+        }
+
+        function applyTheme() { document.documentElement.setAttribute('data-theme', settings.darkMode ? 'dark' : 'light'); }
+        function saveSettings() { localStorage.setItem('calendarSettings', JSON.stringify(settings)); }
+
+        // --- Notifications Engine ---
+        function checkNotifications() {
+            if (!settings.notifications || !("Notification" in window) || Notification.permission !== 'granted') return;
+            
+            const now = new Date();
+            const dateStr = getLocalDateString(now);
+            const timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+
+            if (events[dateStr]) {
+                events[dateStr].forEach(evt => {
+                    if (evt.time === timeStr && !notifiedEvents.has(evt.id)) {
+                        notifiedEvents.add(evt.id);
+                        new Notification("Calendar Event", { 
+                            body: evt.title,
+                            icon: '📅' 
+                        });
+                    }
+                });
+            }
+        }
+
+        // --- Holidays API ---
+        function getCulturalHolidays(year, country) {
+            let hols = []; const add = (m, d, name) => hols.push({ title: name, date: `${year}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`, isHoliday: true });
+            add(1, 1, "New Year's Day"); add(2, 14, "Valentine's Day"); add(3, 17, "St. Patrick's Day"); add(10, 31, "Halloween"); add(12, 24, "Christmas Eve"); add(12, 25, "Christmas Day"); add(12, 26, "Boxing Day"); add(12, 31, "New Year's Eve");
+            let a = year % 19, b = Math.floor(year / 100), c = year % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+            let eMonth = Math.floor((h + l - 7 * m + 114) / 31), eDay = ((h + l - 7 * m + 114) % 31) + 1;
+            let easterDate = new Date(year, eMonth - 1, eDay); add(eMonth, eDay, "Easter Sunday");
+            if (country === 'GB' || country === 'IE') { let mDate = new Date(easterDate.getTime() - (21 * 24 * 60 * 60 * 1000)); add(mDate.getMonth() + 1, mDate.getDate(), "Mother's Day"); } 
+            else { let may1 = new Date(year, 4, 1), offset = may1.getDay() === 0 ? 7 : (7 - may1.getDay()); add(5, 1 + offset + 7, "Mother's Day"); }
+            let june1 = new Date(year, 5, 1), jOffset = june1.getDay() === 0 ? 14 : (7 - june1.getDay() + 14); add(6, 1 + jOffset, "Father's Day");
+            if (country === 'US') { let nov1 = new Date(year, 10, 1), offset = (11 - nov1.getDay()) % 7; add(11, 1 + offset + 21, "Thanksgiving"); } 
+            else if (country === 'CA') { let oct1 = new Date(year, 9, 1), offset = (8 - oct1.getDay()) % 7; add(10, 1 + offset + 7, "Thanksgiving"); }
+            return hols;
+        }
+
+        async function fetchHolidaysForYear(year, countryCode) {
+            if (fetchedHolidays[year]) return; fetchedHolidays[year] = {};
+            try {
+                const res = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/${countryCode}`);
+                if (res.ok) { (await res.json()).forEach(h => { if (!fetchedHolidays[year][h.date]) fetchedHolidays[year][h.date] = []; fetchedHolidays[year][h.date].push({ title: h.name, isHoliday: true }); }); }
+            } catch (err) {}
+            getCulturalHolidays(year, countryCode).forEach(h => {
+                if (!fetchedHolidays[year][h.date]) fetchedHolidays[year][h.date] = [];
+                if(!fetchedHolidays[year][h.date].find(e => e.title.includes(h.title))) fetchedHolidays[year][h.date].push(h);
+            });
+        }
+
+        function filterHolidayScope(evt) {
+            if (settings.holidayScope === 'all') return true;
+            const isStrict = STRICT_MAIN_HOLIDAYS.some(m => evt.title.toLowerCase().includes(m.toLowerCase()));
+            if (settings.holidayScope === 'main') return isStrict;
+            if (settings.holidayScope === 'custom') return settings.customHolidays.some(m => evt.title.toLowerCase().includes(m.toLowerCase()));
+            return false;
+        }
+
+        // --- Event Resolution ---
+        function getEventsForDate(targetDateStr) {
+            let result = [];
+            const [tY, tM, tD] = targetDateStr.split('-');
+            
+            for (let dateKey in events) {
+                const [kY, kM, kD] = dateKey.split('-');
+                if (dateKey === targetDateStr) {
+                    result.push(...events[dateKey].map(e => ({...e, _originalDate: dateKey})));
+                } else if (kM === tM && kD === tD) {
+                    events[dateKey].forEach(e => {
+                        if (e.yearly && kY <= tY) result.push({...e, _originalDate: dateKey});
+                    });
+                }
+            }
+            return result;
+        }
+
+        // --- Calendar Core ---
+        async function loadCalendar() {
+            const dt = new Date(); if (nav !== 0) dt.setMonth(new Date().getMonth() + nav);
+            const month = dt.getMonth(), year = dt.getFullYear();
+            if (settings.showHolidays) await fetchHolidaysForYear(year, settings.holidayCountry);
+
+            const paddingDays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].indexOf(new Date(year, month, 1).toLocaleDateString('en-us', { weekday: 'long' }));
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            
+            monthDisplay.innerText = `${dt.toLocaleDateString('en-us', { month: 'long' })} ${year}`;
+            calendarGrid.innerHTML = '';
+            const todayStr = getLocalDateString(new Date());
+
+            for (let i = 1; i <= paddingDays + daysInMonth; i++) {
+                const daySq = document.createElement('div'); daySq.classList.add('day');
+                if (i > paddingDays) {
+                    const dayString = `${year}-${String(month + 1).padStart(2, '0')}-${String(i - paddingDays).padStart(2, '0')}`;
+                    daySq.dataset.date = dayString;
+                    daySq.innerHTML = `<div class="day-header"><span class="day-number">${i - paddingDays}</span>${settings.showDynamicTimes ? `<div class="dynamic-time"></div>` : ''}</div>`;
+                    
+                    if (dayString === todayStr) daySq.classList.add('current-day');
+                    if (dayString < todayStr) daySq.classList.add('past-day');
+
+                    let combinedEvents = getEventsForDate(dayString);
+                    if (settings.showHolidays && fetchedHolidays[year] && fetchedHolidays[year][dayString]) {
+                        fetchedHolidays[year][dayString].forEach(hol => { if (filterHolidayScope(hol)) combinedEvents.push(hol); });
+                    }
+
+                    if (combinedEvents.length > 0) {
+                        combinedEvents.sort((a, b) => (a.time || '24:00').localeCompare(b.time || '24:00'));
+                        combinedEvents.slice(0, 3).forEach(evt => {
+                            const evtDiv = document.createElement('div'); evtDiv.className = `event-indicator ${evt.isHoliday ? 'holiday' : ''}`;
+                            evtDiv.innerHTML = `<span>${evt.yearly ? '🔁 ' : ''}${evt.title}</span>` + (evt.time && evt.time !== '00:00' ? `<span class="event-time-sm">${evt.time}</span>` : '');
+                            daySq.appendChild(evtDiv);
+                        });
+                        if (combinedEvents.length > 3) {
+                            const more = document.createElement('div'); more.className = 'more-events'; more.innerText = `+${combinedEvents.length - 3} more`; daySq.appendChild(more);
+                        }
+                    }
+                    daySq.addEventListener('click', () => openEventModal(dayString, year));
+                } else { daySq.classList.add('padding'); }
+                calendarGrid.appendChild(daySq);
+            }
+            updateDynamicTimesUI();
+        }
+
+        function updateDynamicTimesUI() {
+            if (!settings.showDynamicTimes) { document.querySelectorAll('.dynamic-time').forEach(el => el.style.display = 'none'); return; }
+            const now = new Date(), todayStr = getLocalDateString(now);
+            document.querySelectorAll('.day:not(.padding)').forEach(dayElem => {
+                const dStr = dayElem.dataset.date, tDiv = dayElem.querySelector('.dynamic-time');
+                if (!tDiv) return;
+                tDiv.style.display = 'block';
+                if (dStr === todayStr) { tDiv.innerText = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}); tDiv.style.color = 'var(--accent-color)'; } 
+                else if (dStr < todayStr) { tDiv.innerText = 'Ended'; tDiv.style.color = 'var(--text-muted)'; } 
+                else {
+                    const ms = new Date(dStr + 'T00:00:00') - now, days = Math.floor(ms / 86400000), hrs = Math.floor((ms / 3600000) % 24);
+                    tDiv.innerText = days > 0 ? `In ${days}d ${hrs}h` : `In ${hrs} hrs`; tDiv.style.color = 'var(--text-main)';
+                }
+            });
+        }
+
+        // --- Modals & Actions ---
+        function openEventModal(dateString, year) {
+            clickedDate = dateString;
+            document.getElementById('modal-date-title').innerText = new Date(dateString + 'T12:00:00').toLocaleDateString('en-us', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+            const list = document.getElementById('existing-events'); list.innerHTML = '';
+            
+            let combinedEvents = getEventsForDate(dateString);
+            if (settings.showHolidays && fetchedHolidays[year] && fetchedHolidays[year][dateString]) {
+                fetchedHolidays[year][dateString].forEach(hol => { if (filterHolidayScope(hol)) combinedEvents.push(hol); });
+            }
+
+            if (combinedEvents.length > 0) {
+                combinedEvents.sort((a, b) => (a.time || '24:00').localeCompare(b.time || '24:00'));
+                combinedEvents.forEach(evt => {
+                    const item = document.createElement('div'); item.className = `event-item ${evt.isHoliday ? 'holiday' : ''}`;
+                    item.innerHTML = `<div class="event-info"><span class="event-title">${evt.yearly ? '🔁 ' : ''}${evt.title} ${evt.isHoliday ? '🎉' : ''}</span>${evt.time ? `<span class="event-time-lg">${evt.time}</span>` : ''}</div>`;
+                    
+                    if (!evt.isHoliday) {
+                        const btnContainer = document.createElement('div');
+                        btnContainer.className = 'action-btns';
+
+                        const editBtn = document.createElement('button');
+                        editBtn.className = 'action-btn edit-btn'; editBtn.innerText = '✏️'; editBtn.title = "Edit Event";
+                        editBtn.onclick = () => {
+                            document.getElementById('event-title').value = evt.title;
+                            document.getElementById('event-time').value = evt.time || '';
+                            document.getElementById('event-yearly').checked = evt.yearly || false;
+                            editingEventId = evt.id;
+                            editingEventDate = evt._originalDate;
+                            document.getElementById('save-event-btn').innerText = 'Update Event';
+                        };
+
+                        const delBtn = document.createElement('button');
+                        delBtn.className = 'action-btn delete-btn'; delBtn.innerText = '🗑️'; delBtn.title = "Delete Event";
+                        delBtn.onclick = async () => {
+                            const html = `
+                                <div style="text-align: center; margin-top: 15px;">
+                                    <label class="checkbox-label" style="justify-content: center;">
+                                        <input type="checkbox" id="send-to-recovery-cb" checked> Move to recovery menu
+                                    </label>
+                                </div>
+                            `;
+                            const confirmDel = await showDialog("Delete Event", `Are you sure you want to delete "${evt.title}"?`, [
+                                { text: 'Cancel', value: false, class: 'btn-outline' },
+                                { text: 'Delete', value: true, class: 'btn-danger' }
+                            ], html);
+
+                            if (confirmDel) {
+                                const targetKey = evt._originalDate;
+                                const toRecovery = document.getElementById('send-to-recovery-cb').checked;
+
+                                if (toRecovery) {
+                                    deletedEvents.push({ ...evt, _originalDate: targetKey, _deletedAt: new Date().toISOString() });
+                                    localStorage.setItem('calendarDeletedEvents', JSON.stringify(deletedEvents));
+                                }
+
+                                events[targetKey] = events[targetKey].filter(e => e.id !== evt.id);
+                                if (events[targetKey].length === 0) delete events[targetKey];
+                                localStorage.setItem('calendarEvents', JSON.stringify(events));
+
+                                openEventModal(dateString, year); 
+                                loadCalendar();
+                            }
+                        };
+                        
+                        btnContainer.appendChild(editBtn);
+                        btnContainer.appendChild(delBtn);
+                        item.appendChild(btnContainer);
+                    }
+                    list.appendChild(item);
+                });
+            } else { list.innerHTML = `<div style="text-align:center; color:var(--text-muted); padding: 10px;">No events</div>`; }
+
+            const isPast = dateString < getLocalDateString(new Date());
+            document.getElementById('event-creation-area').style.display = isPast ? 'none' : 'block';
+            document.getElementById('past-date-warning').style.display = isPast ? 'block' : 'none';
+            if(!isPast) { 
+                document.getElementById('event-title').value = ''; 
+                document.getElementById('event-time').value = ''; 
+                document.getElementById('event-yearly').checked = false;
+            }
+            
+            document.getElementById('modal-backdrop').style.display = 'block';
+            document.getElementById('event-modal').style.display = 'block';
+        }
+
+        function saveEvent() {
+            const title = document.getElementById('event-title').value.trim();
+            if (!title) return;
+
+            if (editingEventId) {
+                if (events[editingEventDate]) {
+                    const evtIndex = events[editingEventDate].findIndex(e => e.id === editingEventId);
+                    if (evtIndex !== -1) {
+                        events[editingEventDate][evtIndex].title = title;
+                        events[editingEventDate][evtIndex].time = document.getElementById('event-time').value;
+                        events[editingEventDate][evtIndex].yearly = document.getElementById('event-yearly').checked;
+                    }
+                }
+            } else {
+                if (!events[clickedDate]) events[clickedDate] = [];
+                const id = Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
+                events[clickedDate].push({ 
+                    id, title, 
+                    time: document.getElementById('event-time').value,
+                    yearly: document.getElementById('event-yearly').checked 
+                });
+            }
+
+            localStorage.setItem('calendarEvents', JSON.stringify(events));
+            loadCalendar(); 
+            closeModals();
+        }
+
+        function closeModals() { 
+            document.getElementById('modal-backdrop').style.display = 'none'; 
+            document.getElementById('event-modal').style.display = 'none'; 
+            document.getElementById('settings-modal').style.display = 'none'; 
+            document.getElementById('recovery-modal').style.display = 'none';
+            clickedDate = null; 
+            editingEventId = null;
+            editingEventDate = null;
+            const saveBtn = document.getElementById('save-event-btn');
+            if (saveBtn) saveBtn.innerText = 'Save Event';
+        }
+
+        function runAutoCleanup() {
+            if (!settings.autoCleanup) return;
+            const now = new Date(); now.setHours(0,0,0,0);
+            const delayMs = parseInt(settings.cleanupDelay) * 86400000;
+            let didDelete = false;
+            for (let dateStr in events) {
+                const nonYearly = events[dateStr].filter(e => e.yearly || ((now.getTime() - new Date(dateStr + 'T00:00:00').getTime()) < delayMs) || dateStr >= getLocalDateString(now));
+                if (nonYearly.length !== events[dateStr].length) {
+                    events[dateStr] = nonYearly; didDelete = true;
+                    if(events[dateStr].length === 0) delete events[dateStr];
+                }
+            }
+            if (didDelete) localStorage.setItem('calendarEvents', JSON.stringify(events));
+        }
+
+        // --- Recovery Menu ---
+        function openRecoveryModal() {
+            closeModals();
+            document.getElementById('modal-backdrop').style.display = 'block';
+            document.getElementById('recovery-modal').style.display = 'block';
+            renderDeletedEvents();
+        }
+
+        function renderDeletedEvents() {
+            const list = document.getElementById('deleted-events-list');
+            list.innerHTML = '';
+            if (deletedEvents.length === 0) {
+                list.innerHTML = `<div style="text-align:center; color:var(--text-muted); padding: 20px;">No deleted events.</div>`;
+                return;
+            }
+            deletedEvents.forEach(evt => {
+                const item = document.createElement('div');
+                item.className = 'event-item';
+                item.innerHTML = `
+                    <div class="event-info">
+                        <span class="event-title">${evt.yearly ? '🔁 ' : ''}${evt.title}</span>
+                        <span class="event-time-lg">Original Date: ${evt._originalDate} ${evt.time ? '@ ' + evt.time : ''}</span>
+                    </div>
+                    <div class="action-btns" style="gap: 8px;">
+                        <button class="btn btn-outline" style="padding: 6px 12px; font-size: 0.8rem;" onclick="recoverEvent('${evt.id}')">Recover</button>
+                        <button class="btn btn-danger" style="padding: 6px 12px; font-size: 0.8rem;" onclick="permanentlyDeleteEvent('${evt.id}')">Delete</button>
+                    </div>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        function recoverEvent(id) {
+            const evtIndex = deletedEvents.findIndex(e => e.id === id);
+            if (evtIndex > -1) {
+                const evt = deletedEvents[evtIndex];
+                const targetDate = evt._originalDate;
+                if (!events[targetDate]) events[targetDate] = [];
+                const { _deletedAt, ...rest } = evt; 
+                events[targetDate].push(rest);
+                deletedEvents.splice(evtIndex, 1);
+                
+                localStorage.setItem('calendarEvents', JSON.stringify(events));
+                localStorage.setItem('calendarDeletedEvents', JSON.stringify(deletedEvents));
+                renderDeletedEvents();
+                loadCalendar();
+            }
+        }
+
+        async function permanentlyDeleteEvent(id) {
+            if(await customConfirm("Permanent Delete", "Permanently delete this event? This action cannot be undone.")) {
+                deletedEvents = deletedEvents.filter(e => e.id !== id);
+                localStorage.setItem('calendarDeletedEvents', JSON.stringify(deletedEvents));
+                renderDeletedEvents();
+            }
+        }
+
+        function recoverAllEvents() {
+            if(deletedEvents.length === 0) return;
+            deletedEvents.forEach(evt => {
+                const targetDate = evt._originalDate;
+                if (!events[targetDate]) events[targetDate] = [];
+                const { _deletedAt, ...rest } = evt;
+                events[targetDate].push(rest);
+            });
+            deletedEvents = [];
+            localStorage.setItem('calendarEvents', JSON.stringify(events));
+            localStorage.setItem('calendarDeletedEvents', JSON.stringify(deletedEvents));
+            renderDeletedEvents();
+            loadCalendar();
+        }
+
+        async function permanentlyDeleteAll() {
+            if(deletedEvents.length === 0) return;
+            if(await customConfirm("Delete All", "Permanently delete ALL events in the recovery bin? This cannot be undone.")) {
+                deletedEvents = [];
+                localStorage.setItem('calendarDeletedEvents', JSON.stringify(deletedEvents));
+                renderDeletedEvents();
+            }
+        }
+
+        // --- Import / Export ---
+        function toggleDataUI() {
+            const a = document.getElementById('data-action').value, m = document.getElementById('data-method').value;
+            ['export-text-ui', 'export-file-ui', 'import-text-ui', 'import-file-ui'].forEach(id => document.getElementById(id).style.display = 'none');
+            document.getElementById(`${a}-${m}-ui`).style.display = 'block';
+            document.getElementById('data-scope').style.display = (a === 'export') ? 'inline-block' : 'none';
+        }
+
+        function generateCleanData(sourceEvents, sourceSettings, scope, filterPast = false) {
+            let data = {};
+            const todayStr = getLocalDateString(new Date());
+            if (scope === 'events' || scope === 'both') {
+                const cleanEvents = {};
+                for (const [date, dayEvents] of Object.entries(sourceEvents)) {
+                    if (filterPast && date < todayStr) continue;
+                    const cleanedDay = dayEvents.map(({ id, ...rest }) => rest);
+                    if (cleanedDay.length) cleanEvents[date] = cleanedDay;
+                }
+                data.events = cleanEvents;
+            }
+            if (scope === 'settings' || scope === 'both') data.settings = sourceSettings;
+            return JSON.stringify(data, null, 2);
+        }
+
+        function generateExportText() { document.getElementById('export-textarea').value = generateCleanData(events, settings, document.getElementById('data-scope').value); }
+        async function copyExportText() {
+            const txt = document.getElementById('export-textarea').value;
+            if (!txt) return customAlert('Wait', 'Generate the text first.');
+            await navigator.clipboard.writeText(txt); customAlert('Success', 'Copied clean data to clipboard!');
+        }
+        function downloadExportFileDirectly() {
+            const scope = document.getElementById('data-scope').value;
+            downloadJsonFile(generateCleanData(events, settings, scope), `calendar-${scope}-clean`);
+        }
+
+        function showPastEventsDialog() {
+            return new Promise(resolve => {
+                const html = `
+                    <div style="margin-top: 15px; background: var(--surface-hover); padding: 15px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                        <label class="checkbox-label" style="margin-bottom: 15px;">
+                            <input type="checkbox" id="past-filter-cb" checked> Continue without past events
+                        </label>
+                    </div>`;
+                showDialog("Past Events Detected", "The imported data contains events scheduled for past dates.", [
+                    { text: "Cancel Import", value: "cancel", class: "btn-outline" },
+                    { text: "Continue Import", value: "continue", class: "btn-primary" }
+                ], html).then(action => {
+                    resolve({ action, filterPast: document.getElementById('past-filter-cb').checked });
+                });
+            });
+        }
+
+        async function processImportData(parsed, scope) {
+            let importedObj = {};
+            if (scope === 'events' || scope === 'both') {
+                if (parsed.events) importedObj = parsed.events;
+                else if (scope === 'events' && !parsed.settings) importedObj = parsed;
+            }
+            
+            let hasPast = false;
+            const todayStr = getLocalDateString(new Date());
+
+            for (const [date, dayEvents] of Object.entries(importedObj)) {
+                if (date < todayStr) hasPast = true;
+            }
+
+            let filterPastEvents = false;
+            if (hasPast) {
+                const res = await showPastEventsDialog();
+                if (res.action === 'cancel') return;
+                filterPastEvents = res.filterPast;
+            }
+
+            // --- NEW: DUPLICATE DETECTION AND RENAMING ---
+            let duplicates = [];
+            let nonDuplicates = [];
+
+            for (const [date, dayEvents] of Object.entries(importedObj)) {
+                if (filterPastEvents && date < todayStr) continue;
+                
+                // Note: Ensures exact quantity processing! Loops explicitly through what is provided.
+                dayEvents.forEach(importedEvt => {
+                    const existingDay = events[date] || [];
+                    const isDupe = existingDay.find(e => e.title === importedEvt.title && e.time === importedEvt.time);
+                    if (isDupe) {
+                        duplicates.push({ date, evt: importedEvt });
+                    } else {
+                        nonDuplicates.push({ date, evt: importedEvt });
+                    }
+                });
+            }
+
+            if (duplicates.length > 0) {
+                let dupHtml = `
+                    <div style="margin-top: 15px; background: var(--surface-hover); padding: 15px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); max-height: 250px; overflow-y: auto;">
+                        <label class="checkbox-label" style="margin-bottom: 15px; font-weight: bold; color: var(--danger-color);">
+                            <input type="checkbox" id="include-dupes-cb" checked onchange="document.getElementById('dupe-list-area').style.opacity = this.checked ? '1' : '0.4'"> 
+                            Include duplicates
+                        </label>
+                        <p style="font-size: 0.85rem; margin-bottom: 10px;">Rename duplicates below to import them:</p>
+                        <div id="dupe-list-area">
+                `;
+                duplicates.forEach((d, i) => {
+                    dupHtml += `
+                        <div style="margin-bottom: 8px;">
+                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 2px;">${d.date} ${d.evt.time ? 'at ' + d.evt.time : ''}</div>
+                            <input type="text" id="dupe-title-${i}" value="${d.evt.title}" style="width: 100%; padding: 6px; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+                        </div>
+                    `;
+                });
+                dupHtml += `</div></div>`;
+
+                const dupeAction = await showDialog("Duplicates Detected", `Found ${duplicates.length} duplicate event(s).`, [
+                    { text: "Cancel Import", value: "cancel", class: "btn-outline" },
+                    { text: "Continue Import", value: "continue", class: "btn-primary" }
+                ], dupHtml);
+
+                if (dupeAction === 'cancel') return; 
+
+                if (document.getElementById('include-dupes-cb').checked) {
+                    duplicates.forEach((d, i) => {
+                        d.evt.title = document.getElementById(`dupe-title-${i}`).value;
+                        nonDuplicates.push({ date: d.date, evt: d.evt });
+                    });
+                }
+            }
+            
+            // Apply only the non-duplicate (or renamed duplicate) items
+            let mergedEvents = { ...events };
+            nonDuplicates.forEach(item => {
+                if (!mergedEvents[item.date]) mergedEvents[item.date] = [];
+                mergedEvents[item.date].push({
+                    ...item.evt,
+                    id: Date.now().toString(36) + Math.random().toString(36).substring(2, 9)
+                });
+            });
+            
+            events = mergedEvents;
+            localStorage.setItem('calendarEvents', JSON.stringify(events));
+
+            if ((scope === 'settings' || scope === 'both') && parsed.settings) {
+                settings = { ...defaultSettings, ...parsed.settings };
+                localStorage.setItem('calendarSettings', JSON.stringify(settings));
+            }
+
+            await initApp();
+            customAlert("Import Complete", "Data has been successfully imported into your calendar.");
+        }
+
+        async function processImportText() {
+            try { await processImportData(JSON.parse(document.getElementById('import-textarea').value), document.getElementById('data-scope').value); document.getElementById('import-textarea').value = ''; } 
+            catch(e) { customAlert("Error", "Invalid JSON text format."); }
+        }
+
+        function processImportFile() {
+            const input = document.getElementById('import-file-input');
+            if (!input.files.length) return customAlert("Wait", "Select a file first.");
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try { await processImportData(JSON.parse(e.target.result), document.getElementById('data-scope').value); input.value = ''; } 
+                catch(err) { customAlert("Error", "Invalid JSON file format."); }
+            };
+            reader.readAsText(input.files[0]);
+        }
+
+        async function handleDeleteAll() {
+            if (await customConfirm("Delete All", "Delete ALL user events? This cannot be undone.")) {
+                events = {}; localStorage.removeItem('calendarEvents');
+                await loadCalendar(); closeModals();
+            }
+        }
+
+        document.getElementById('next-btn').addEventListener('click', async () => { nav++; await loadCalendar(); });
+        document.getElementById('prev-btn').addEventListener('click', async () => { nav--; await loadCalendar(); });
+        document.getElementById('today-btn').addEventListener('click', async () => { nav = 0; await loadCalendar(); });
+        document.getElementById('settings-btn').addEventListener('click', () => { document.getElementById('modal-backdrop').style.display = 'block'; document.getElementById('settings-modal').style.display = 'block'; });
+        document.getElementById('modal-backdrop').addEventListener('click', closeModals);
+        
+        initApp();
+    </script>
+</body>
+</html>
