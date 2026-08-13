@@ -418,118 +418,530 @@
 
   <script>
     // --- PROCEDURAL TEXTURES ---
+    // Textures are drawn at high resolution with layered noise/gradients/grain,
+    // and a matching normal map is derived from each one so the room's point
+    // lights and flashlight actually rake across the surface detail instead
+    // of everything looking flat.
     function makeTextureCanvas(w, h, drawFn) {
       const cvs = document.createElement('canvas');
       cvs.width = w;
       cvs.height = h;
       const ctx = cvs.getContext('2d');
       drawFn(ctx, w, h);
+      return cvs;
+    }
+
+    function dataUrl(cvs) {
       return cvs.toDataURL();
     }
 
-    const texRedCarpet = makeTextureCanvas(512, 512, (ctx, w, h) => {
-      ctx.fillStyle = '#611212';
-      ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = '#470b0b';
-      for (let y = 0; y < h; y += 16) ctx.fillRect(0, y, w, 6);
-      ctx.fillStyle = '#f39c12';
-      ctx.lineWidth = 4;
-      ctx.strokeRect(16, 16, w - 32, h - 32);
-      ctx.fillStyle = '#3a0808';
-      for (let i = 0; i < 12000; i++) ctx.fillRect(Math.random() * w, Math.random() * h, 2, 2);
-    });
+    // Derives a tangent-space normal map from a canvas's luminance so flat
+    // procedural art gets real per-pixel shading under directional lights.
+    function normalMapFromCanvas(srcCanvas, strength) {
+      const w = srcCanvas.width, h = srcCanvas.height;
+      const src = srcCanvas.getContext('2d').getImageData(0, 0, w, h).data;
 
-    const texWoodWall = makeTextureCanvas(512, 512, (ctx, w, h) => {
-      ctx.fillStyle = '#c7cacd';
-      ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = '#aaad2d';
-      for (let x = 0; x < w; x += 32) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
-        ctx.fillRect(x, 0, 3, h);
+      const lum = new Float32Array(w * h);
+      for (let i = 0; i < w * h; i++) {
+        const o = i * 4;
+        lum[i] = (src[o] * 0.299 + src[o + 1] * 0.587 + src[o + 2] * 0.114) / 255;
       }
-      ctx.fillStyle = 'rgba(0,0,0,0.04)';
-      for (let i = 0; i < 4000; i++) ctx.fillRect(Math.random() * w, Math.random() * h, 1, 12);
-    });
 
-    const texGreyWood = makeTextureCanvas(512, 512, (ctx, w, h) => {
-      ctx.fillStyle = '#6c7075';
+      const out = document.createElement('canvas');
+      out.width = w;
+      out.height = h;
+      const octx = out.getContext('2d');
+      const img = octx.createImageData(w, h);
+
+      for (let y = 0; y < h; y++) {
+        const yU = (y - 1 + h) % h, yD = (y + 1) % h;
+        for (let x = 0; x < w; x++) {
+          const xL = (x - 1 + w) % w, xR = (x + 1) % w;
+          const dx = (lum[y * w + xL] - lum[y * w + xR]) * strength;
+          const dy = (lum[yU * w + x] - lum[yD * w + x]) * strength;
+          let nx = -dx, ny = -dy, nz = 1.0;
+          const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+          nx /= len; ny /= len; nz /= len;
+          const o = (y * w + x) * 4;
+          img.data[o] = (nx * 0.5 + 0.5) * 255;
+          img.data[o + 1] = (ny * 0.5 + 0.5) * 255;
+          img.data[o + 2] = (nz * 0.5 + 0.5) * 255;
+          img.data[o + 3] = 255;
+        }
+      }
+      octx.putImageData(img, 0, 0);
+      return out.toDataURL();
+    }
+
+    function speckle(ctx, w, h, count, minSize, maxSize, color) {
+      ctx.fillStyle = color;
+      for (let i = 0; i < count; i++) {
+        const s = minSize + Math.random() * (maxSize - minSize);
+        ctx.fillRect(Math.random() * w, Math.random() * h, s, s);
+      }
+    }
+
+    // Clean dark-red low-pile carpet: dense fibers, subtle directional nap, no grid and no bulky cushion-like patches.
+    const texRedCarpet = makeTextureCanvas(1024, 1024, (ctx, w, h) => {
+      const base = ctx.createLinearGradient(0, 0, 0, h);
+      base.addColorStop(0, '#3f0b14');
+      base.addColorStop(0.45, '#5b101d');
+      base.addColorStop(1, '#390914');
+      ctx.fillStyle = base;
       ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = '#525559';
-      for (let x = 0; x < w; x += 32) ctx.fillRect(x, 0, 3, h);
-      ctx.fillStyle = 'rgba(0,0,0,0.08)';
-      for (let i = 0; i < 4000; i++) ctx.fillRect(Math.random() * w, Math.random() * h, 1.5, 14);
+
+      // Very fine, even pile. The texture remains visually continuous instead of forming blobs.
+      for (let i = 0; i < 120000; i++) {
+        const x = Math.random() * w, y = Math.random() * h;
+        const len = 0.8 + Math.random() * 2.2;
+        const a = 0.022 + Math.random() * 0.045;
+        ctx.strokeStyle = Math.random() > 0.52
+          ? `rgba(225,150,160,${a})`
+          : `rgba(8,1,4,${a})`;
+        ctx.lineWidth = 0.35 + Math.random() * 0.55;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + len, y + (Math.random()-0.5)*0.65);
+        ctx.stroke();
+      }
+
+      // Tiny tone variation only; no large stains or shapes.
+      for (let i = 0; i < 18000; i++) {
+        const x = Math.random() * w, y = Math.random() * h;
+        const a = 0.015 + Math.random() * 0.025;
+        ctx.fillStyle = Math.random() > 0.5 ? `rgba(235,180,185,${a})` : `rgba(0,0,0,${a})`;
+        ctx.fillRect(x, y, 1, 1);
+      }
+
+      const softEdge = ctx.createRadialGradient(w/2, h/2, w*0.15, w/2, h/2, w*0.78);
+      softEdge.addColorStop(0, 'rgba(0,0,0,0)');
+      softEdge.addColorStop(1, 'rgba(12,0,4,0.14)');
+      ctx.fillStyle = softEdge;
+      ctx.fillRect(0,0,w,h);
     });
 
-    const texDoorWood = makeTextureCanvas(512, 512, (ctx, w, h) => {
-      ctx.fillStyle = '#3d2010';
+    // Medium stone-grey wall panels with a restrained mahogany wood design.
+    // The grey reads as the room's main surface while the dark reddish-brown grain gives it the requested mahogany character.
+    function drawMahoganyPlankWall(ctx, w, h, plankSize, vertical) {
+      const base = ctx.createLinearGradient(0, 0, vertical ? w : 0, vertical ? 0 : h);
+      base.addColorStop(0, '#5d6267');
+      base.addColorStop(0.5, '#73787d');
+      base.addColorStop(1, '#565b60');
+      ctx.fillStyle = base;
       ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = '#261208';
-      for (let x = 0; x < w; x += 32) ctx.fillRect(x, 0, 3, h);
-      ctx.fillStyle = 'rgba(0,0,0,0.15)';
-      for (let i = 0; i < 3000; i++) ctx.fillRect(Math.random() * w, Math.random() * h, 1.5, 18);
+
+      const across = vertical ? w : h;
+      const along = vertical ? h : w;
+
+      for (let p = 0; p < across; p += plankSize) {
+        const tone = (Math.random() - 0.5) * 12;
+        ctx.fillStyle = tone < 0
+          ? `rgba(15,18,20,${Math.abs(tone)/180})`
+          : `rgba(220,225,228,${tone/520})`;
+        if (vertical) ctx.fillRect(p, 0, plankSize, h);
+        else ctx.fillRect(0, p, w, plankSize);
+
+        // Mahogany-colored linear grain embedded into the stone-grey panel.
+        for (let i = 0; i < 20; i++) {
+          const gPos = Math.random() * along;
+          const amp = 2 + Math.random() * 4;
+          ctx.strokeStyle = Math.random() > 0.30
+            ? `rgba(76,28,24,${0.08 + Math.random()*0.055})`
+            : `rgba(150,68,50,${0.035 + Math.random()*0.035})`;
+          ctx.lineWidth = 0.65 + Math.random() * 1.15;
+          ctx.beginPath();
+          for (let ss = 0; ss <= plankSize; ss += 10) {
+            const wob = Math.sin(ss*0.025 + gPos*0.08) * amp + Math.sin(ss*0.008 + gPos*0.03) * amp*0.55;
+            if (vertical) {
+              if (ss === 0) ctx.moveTo(p+ss, gPos+wob); else ctx.lineTo(p+ss, gPos+wob);
+            } else {
+              if (ss === 0) ctx.moveTo(gPos+wob, p+ss); else ctx.lineTo(gPos+wob, p+ss);
+            }
+          }
+          ctx.stroke();
+        }
+
+        if (Math.random() < 0.22) {
+          const kAlong = Math.random()*along;
+          const kAcross = p + plankSize/2 + (Math.random()-0.5)*plankSize*0.35;
+          const kx = vertical ? kAcross : kAlong;
+          const ky = vertical ? kAlong : kAcross;
+          const kg = ctx.createRadialGradient(kx,ky,0,kx,ky,14);
+          kg.addColorStop(0,'rgba(67,23,18,0.18)');
+          kg.addColorStop(0.4,'rgba(121,54,39,0.07)');
+          kg.addColorStop(1,'rgba(0,0,0,0)');
+          ctx.fillStyle = kg;
+          ctx.beginPath(); ctx.ellipse(kx,ky,vertical?11:15,vertical?15:11,0,0,Math.PI*2); ctx.fill();
+        }
+
+        // Subtle panel seams — clean, not abandoned.
+        ctx.fillStyle = 'rgba(22,25,28,0.20)';
+        if (vertical) ctx.fillRect(p,0,2,h); else ctx.fillRect(0,p,w,2);
+        ctx.fillStyle = 'rgba(235,238,240,0.08)';
+        if (vertical) ctx.fillRect(p+2,0,1,h); else ctx.fillRect(0,p+2,w,1);
+      }
+    }
+
+    const texWoodWall = makeTextureCanvas(1024, 1024, (ctx, w, h) => {
+      drawMahoganyPlankWall(ctx, w, h, 128, true);
     });
 
-    const texFrameWood = makeTextureCanvas(256, 256, (ctx, w, h) => {
-      ctx.fillStyle = '#221107';
-      ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = '#110803';
-      for (let x = 0; x < w; x += 16) ctx.fillRect(x, 0, 2, h);
+    const texGreyWood = makeTextureCanvas(1024, 1024, (ctx, w, h) => {
+      drawMahoganyPlankWall(ctx, w, h, 110, false);
     });
 
-    const texTableWood = makeTextureCanvas(512, 512, (ctx, w, h) => {
-      ctx.fillStyle = '#5c3317';
-      ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = '#3d200d';
-      for (let y = 0; y < h; y += 12) ctx.fillRect(0, y, w, 2);
-      ctx.fillStyle = 'rgba(0,0,0,0.08)';
-      for (let i = 0; i < 5000; i++) ctx.fillRect(Math.random()*w, Math.random()*h, 10, 1.5);
-    });
-
-    const texSofaFabric = makeTextureCanvas(256, 256, (ctx, w, h) => {
-      ctx.fillStyle = '#181d28';
-      ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = '#0f121a';
-      for (let i = 0; i < 4000; i++) ctx.fillRect(Math.random() * w, Math.random() * h, 2, 2);
-    });
-
-    const texPlantLeaf = makeTextureCanvas(256, 256, (ctx, w, h) => {
-      ctx.fillStyle = '#2e7d32';
-      ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = '#1b5e20';
-      for (let i = 0; i < 2000; i++) ctx.fillRect(Math.random()*w, Math.random()*h, 3, 3);
-    });
-
-    const texCeramicPot = makeTextureCanvas(256, 256, (ctx, w, h) => {
-      ctx.fillStyle = '#a0522d';
-      ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = '#8b4513';
-      for (let y = 0; y < h; y += 16) ctx.fillRect(0, y, w, 3);
-    });
-
-    const texCardboard = makeTextureCanvas(256, 256, (ctx, w, h) => {
-      ctx.fillStyle = '#b8860b';
-      ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = '#996515';
-      for (let i = 0; i < 3000; i++) ctx.fillRect(Math.random() * w, Math.random() * h, 2, 1);
-      ctx.strokeStyle = '#5c3d11';
-      ctx.lineWidth = 4;
-      ctx.strokeRect(8, 8, w - 16, h - 16);
-    });
-
-    const texSkyDay = makeTextureCanvas(512, 512, (ctx, w, h) => {
-      const grad = ctx.createLinearGradient(0, 0, 0, h);
-      grad.addColorStop(0, '#2b7cd3');
-      grad.addColorStop(0.5, '#68b1f4');
-      grad.addColorStop(1, '#c8e2f8');
+    // Dark stained door: strong vertical grain plus a recessed panel bevel.
+    const texDoorWood = makeTextureCanvas(1024, 1024, (ctx, w, h) => {
+      const grad = ctx.createLinearGradient(0, 0, w, 0);
+      grad.addColorStop(0, '#331a0c');
+      grad.addColorStop(0.5, '#432610');
+      grad.addColorStop(1, '#2c1509');
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
-      ctx.beginPath();
-      ctx.arc(140, 180, 80, 0, Math.PI * 2);
-      ctx.arc(220, 160, 100, 0, Math.PI * 2);
-      ctx.arc(300, 190, 70, 0, Math.PI * 2);
-      ctx.fill();
+
+      for (let i = 0; i < 90; i++) {
+        const gx = Math.random() * w;
+        ctx.strokeStyle = `rgba(0,0,0,${0.05 + Math.random() * 0.12})`;
+        ctx.lineWidth = 1 + Math.random() * 2;
+        ctx.beginPath();
+        for (let y = 0; y <= h; y += 20) {
+          const wob = Math.sin(y * 0.04 + gx) * 5;
+          if (y === 0) ctx.moveTo(gx + wob, y); else ctx.lineTo(gx + wob, y);
+        }
+        ctx.stroke();
+      }
+      speckle(ctx, w, h, 6000, 1, 2.2, 'rgba(0,0,0,0.12)');
+
+      const pad = w * 0.09;
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+      ctx.lineWidth = 10;
+      ctx.strokeRect(pad, pad, w - pad * 2, h - pad * 2);
+      ctx.strokeStyle = 'rgba(255,220,180,0.08)';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(pad + 10, pad + 10, w - (pad + 10) * 2, h - (pad + 10) * 2);
+
+      const sheen = ctx.createLinearGradient(0, 0, w, h);
+      sheen.addColorStop(0, 'rgba(255,255,255,0.06)');
+      sheen.addColorStop(0.4, 'rgba(255,255,255,0)');
+      sheen.addColorStop(1, 'rgba(0,0,0,0.12)');
+      ctx.fillStyle = sheen;
+      ctx.fillRect(0, 0, w, h);
     });
+
+    const texFrameWood = makeTextureCanvas(512, 512, (ctx, w, h) => {
+      ctx.fillStyle = '#23120a';
+      ctx.fillRect(0, 0, w, h);
+      for (let x = 0; x < w; x += 30) {
+        ctx.strokeStyle = `rgba(0,0,0,${0.15 + Math.random() * 0.15})`;
+        ctx.lineWidth = 2 + Math.random() * 2;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+        ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.fillRect(0, 0, w * 0.06, h);
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.fillRect(w - w * 0.06, 0, w * 0.06, h);
+    });
+
+    // Varnished tabletop: warm wavy grain with a soft diagonal gloss streak.
+    const texTableWood = makeTextureCanvas(1024, 1024, (ctx, w, h) => {
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, '#6b3c1c');
+      grad.addColorStop(1, '#4a2810');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+
+      for (let i = 0; i < 46; i++) {
+        const gy = Math.random() * h;
+        ctx.strokeStyle = `rgba(30,15,5,${0.06 + Math.random() * 0.1})`;
+        ctx.lineWidth = 1 + Math.random() * 2.5;
+        ctx.beginPath();
+        for (let x = 0; x <= w; x += 18) {
+          const wob = Math.sin(x * 0.02 + gy) * 10 + Math.sin(x * 0.09 + gy * 2) * 3;
+          if (x === 0) ctx.moveTo(x, gy + wob); else ctx.lineTo(x, gy + wob);
+        }
+        ctx.stroke();
+      }
+      speckle(ctx, w, h, 9000, 4, 14, 'rgba(0,0,0,0.05)');
+
+      const gloss = ctx.createLinearGradient(0, 0, w, h);
+      gloss.addColorStop(0, 'rgba(255,255,255,0.12)');
+      gloss.addColorStop(0.35, 'rgba(255,255,255,0.02)');
+      gloss.addColorStop(0.5, 'rgba(255,255,255,0.1)');
+      gloss.addColorStop(1, 'rgba(0,0,0,0.1)');
+      ctx.fillStyle = gloss;
+      ctx.fillRect(0, 0, w, h);
+    });
+
+    // Woven fabric: crosshatched weave, cushion tone variation, faint seams.
+    const texSofaFabric = makeTextureCanvas(512, 512, (ctx, w, h) => {
+      ctx.fillStyle = '#181d28';
+      ctx.fillRect(0, 0, w, h);
+
+      for (let i = 0; i < 6; i++) {
+        const px = Math.random() * w, py = Math.random() * h, pr = 60 + Math.random() * 100;
+        const grad = ctx.createRadialGradient(px, py, 0, px, py, pr);
+        grad.addColorStop(0, 'rgba(255,255,255,0.04)');
+        grad.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(px, py, pr, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+      ctx.lineWidth = 1;
+      for (let x = 0; x < w; x += 4) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+      ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+      for (let y = 0; y < h; y += 4) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+
+      speckle(ctx, w, h, 9000, 1, 2, 'rgba(0,0,0,0.12)');
+
+      ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([6, 5]);
+      ctx.strokeRect(20, 20, w - 40, h - 40);
+      ctx.setLineDash([]);
+    });
+
+    // Leaf: vein pattern radiating over a mottled green gradient.
+    const texPlantLeaf = makeTextureCanvas(512, 512, (ctx, w, h) => {
+      const grad = ctx.createLinearGradient(0, 0, w, h);
+      grad.addColorStop(0, '#357a38');
+      grad.addColorStop(0.5, '#2c6b2f');
+      grad.addColorStop(1, '#1f4f22');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+
+      for (let i = 0; i < 40; i++) {
+        const px = Math.random() * w, py = Math.random() * h, pr = 20 + Math.random() * 50;
+        ctx.fillStyle = Math.random() > 0.5 ? 'rgba(80,160,80,0.10)' : 'rgba(10,50,15,0.12)';
+        ctx.beginPath();
+        ctx.ellipse(px, py, pr, pr * 0.6, Math.random() * Math.PI, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.strokeStyle = 'rgba(230,255,220,0.18)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(w / 2, 0);
+      ctx.lineTo(w / 2, h);
+      ctx.stroke();
+      ctx.lineWidth = 1.4;
+      for (let y = 20; y < h; y += 34) {
+        ctx.beginPath();
+        ctx.moveTo(w / 2, y);
+        ctx.lineTo(w / 2 - w * 0.4, y + 40);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(w / 2, y);
+        ctx.lineTo(w / 2 + w * 0.4, y + 40);
+        ctx.stroke();
+      }
+      speckle(ctx, w, h, 3000, 1, 2, 'rgba(0,0,0,0.08)');
+    });
+
+    // Terracotta pot: warm gradient shading, highlight band, rim ridges.
+    const texCeramicPot = makeTextureCanvas(512, 512, (ctx, w, h) => {
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, '#8a4a29');
+      grad.addColorStop(0.5, '#b0632f');
+      grad.addColorStop(1, '#7a3f22');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+
+      const highlight = ctx.createLinearGradient(0, 0, w, 0);
+      highlight.addColorStop(0, 'rgba(0,0,0,0.22)');
+      highlight.addColorStop(0.28, 'rgba(255,220,180,0.18)');
+      highlight.addColorStop(0.55, 'rgba(0,0,0,0.05)');
+      highlight.addColorStop(1, 'rgba(0,0,0,0.3)');
+      ctx.fillStyle = highlight;
+      ctx.fillRect(0, 0, w, h);
+
+      for (let y = 0; y < h; y += 22) {
+        ctx.fillStyle = 'rgba(0,0,0,0.16)';
+        ctx.fillRect(0, y, w, 3);
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        ctx.fillRect(0, y + 3, w, 2);
+      }
+      speckle(ctx, w, h, 4000, 1, 2.5, 'rgba(0,0,0,0.07)');
+    });
+
+    // Cardboard: corrugation ripple shading, crease folds and a tape strip.
+    const texCardboard = makeTextureCanvas(512, 512, (ctx, w, h) => {
+      ctx.fillStyle = '#b8860b';
+      ctx.fillRect(0, 0, w, h);
+
+      for (let x = 0; x < w; x += 6) {
+        const shade = (Math.sin(x * 0.5) + 1) / 2;
+        ctx.fillStyle = `rgba(${shade > 0.5 ? '255,255,255' : '0,0,0'},${Math.abs(shade - 0.5) * 0.18})`;
+        ctx.fillRect(x, 0, 3, h);
+      }
+
+      speckle(ctx, w, h, 4500, 1, 2, 'rgba(90,60,10,0.18)');
+
+      ctx.strokeStyle = '#5c3d11';
+      ctx.lineWidth = 5;
+      ctx.strokeRect(10, 10, w - 20, h - 20);
+      ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, h * 0.5);
+      ctx.lineTo(w, h * 0.5);
+      ctx.stroke();
+
+      const tape = ctx.createLinearGradient(0, h * 0.42, 0, h * 0.58);
+      tape.addColorStop(0, 'rgba(220,200,150,0)');
+      tape.addColorStop(0.5, 'rgba(220,200,150,0.35)');
+      tape.addColorStop(1, 'rgba(220,200,150,0)');
+      ctx.fillStyle = tape;
+      ctx.fillRect(0, h * 0.42, w, h * 0.16);
+    });
+
+    // Night sky: deep blue-black, tiny stars and a soft moon with subtle crater detail.
+    const texSkyDay = makeTextureCanvas(1024, 1024, (ctx, w, h) => {
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, '#02030a');
+      grad.addColorStop(0.42, '#070c1d');
+      grad.addColorStop(0.78, '#111a32');
+      grad.addColorStop(1, '#1b2540');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+
+      // Tiny stars — mostly dim, with a handful of brighter points.
+      for (let i = 0; i < 340; i++) {
+        const x = Math.random() * w, y = Math.random() * h;
+        const r = Math.random() < 0.84 ? (0.45 + Math.random()*0.7) : (1.0 + Math.random()*1.1);
+        const a = Math.random() < 0.88 ? (0.25 + Math.random()*0.45) : (0.65 + Math.random()*0.3);
+        ctx.fillStyle = `rgba(220,230,255,${a})`;
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+      }
+
+      // Subtle star halos.
+      for (let i = 0; i < 22; i++) {
+        const x = Math.random()*w, y = Math.random()*h, r = 5 + Math.random()*10;
+        const g = ctx.createRadialGradient(x,y,0,x,y,r);
+        g.addColorStop(0,'rgba(180,205,255,0.12)');
+        g.addColorStop(1,'rgba(180,205,255,0)');
+        ctx.fillStyle = g; ctx.fillRect(x-r,y-r,r*2,r*2);
+      }
+
+      // Moon and soft halo.
+      const mx = w*0.73, my = h*0.22, mr = 58;
+      const halo = ctx.createRadialGradient(mx,my,0,mx,my,135);
+      halo.addColorStop(0,'rgba(235,240,255,0.20)');
+      halo.addColorStop(0.4,'rgba(190,210,255,0.08)');
+      halo.addColorStop(1,'rgba(190,210,255,0)');
+      ctx.fillStyle = halo; ctx.fillRect(0,0,w,h);
+
+      const moon = ctx.createRadialGradient(mx-12,my-10,4,mx,my,mr);
+      moon.addColorStop(0,'#fffef4');
+      moon.addColorStop(0.72,'#e9edf2');
+      moon.addColorStop(1,'#bfc6d0');
+      ctx.fillStyle = moon; ctx.beginPath(); ctx.arc(mx,my,mr,0,Math.PI*2); ctx.fill();
+
+      // Very subtle craters.
+      for (let i=0;i<22;i++) {
+        const a = Math.random()*Math.PI*2, rr = Math.random()*mr*0.75;
+        const cx = mx + Math.cos(a)*rr, cy = my + Math.sin(a)*rr;
+        const cr = 2 + Math.random()*8;
+        ctx.fillStyle = `rgba(125,133,145,${0.055 + Math.random()*0.06})`;
+        ctx.beginPath(); ctx.arc(cx,cy,cr,0,Math.PI*2); ctx.fill();
+      }
+    });
+
+    // Brushed metal (lockers): vertical brush streaks, rivets, grime.
+    const texBrushedMetal = makeTextureCanvas(512, 512, (ctx, w, h) => {
+      const grad = ctx.createLinearGradient(0, 0, w, 0);
+      grad.addColorStop(0, '#3f454c');
+      grad.addColorStop(0.5, '#565d66');
+      grad.addColorStop(1, '#3a3f45');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+
+      for (let i = 0; i < 1400; i++) {
+        const x = Math.random() * w;
+        ctx.strokeStyle = `rgba(${Math.random() > 0.5 ? '255,255,255' : '0,0,0'},${Math.random() * 0.06})`;
+        ctx.lineWidth = 0.5 + Math.random();
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x + (Math.random() - 0.5) * 6, h);
+        ctx.stroke();
+      }
+
+      for (let y = h * 0.18; y < h; y += h * 0.22) {
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.fillRect(0, y, w, 2);
+        for (let x = 14; x < w; x += w / 4) {
+          ctx.beginPath();
+          ctx.fillStyle = 'rgba(0,0,0,0.35)';
+          ctx.arc(x, y, 5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.fillStyle = 'rgba(220,220,225,0.4)';
+          ctx.arc(x - 1.2, y - 1.2, 2.6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      for (let i = 0; i < 5; i++) {
+        const rx = Math.random() * w, ry = Math.random() * h, rr = 12 + Math.random() * 26;
+        const rg = ctx.createRadialGradient(rx, ry, 0, rx, ry, rr);
+        rg.addColorStop(0, 'rgba(110,70,30,0.22)');
+        rg.addColorStop(1, 'rgba(110,70,30,0)');
+        ctx.fillStyle = rg;
+        ctx.beginPath();
+        ctx.arc(rx, ry, rr, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      speckle(ctx, w, h, 2500, 1, 1.5, 'rgba(0,0,0,0.1)');
+    });
+
+    // Dark gunmetal (racks / trim): subtle brushing and scuffed scratches.
+    const texDarkMetal = makeTextureCanvas(512, 512, (ctx, w, h) => {
+      ctx.fillStyle = '#1b1d21';
+      ctx.fillRect(0, 0, w, h);
+      for (let i = 0; i < 900; i++) {
+        const x = Math.random() * w;
+        ctx.strokeStyle = `rgba(255,255,255,${Math.random() * 0.05})`;
+        ctx.lineWidth = 0.6;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+        ctx.stroke();
+      }
+      for (let i = 0; i < 20; i++) {
+        ctx.strokeStyle = `rgba(255,255,255,${0.05 + Math.random() * 0.08})`;
+        ctx.lineWidth = 0.8;
+        const y = Math.random() * h, x0 = Math.random() * w;
+        ctx.beginPath();
+        ctx.moveTo(x0, y);
+        ctx.lineTo(x0 + (Math.random() - 0.5) * 120, y + (Math.random() - 0.5) * 10);
+        ctx.stroke();
+      }
+      speckle(ctx, w, h, 2000, 1, 1.5, 'rgba(0,0,0,0.15)');
+    });
+
+    // Shared late-pass wear for a more believable abandoned/liminal look.
+    function addLiminalWear(cvs, strength = 1) {
+      const ctx = cvs.getContext('2d'), w = cvs.width, h = cvs.height;
+      for (let i = 0; i < Math.floor(900 * strength); i++) {
+        const x = Math.random() * w, y = Math.random() * h, len = 8 + Math.random() * 70, angle = Math.random() * Math.PI * 2;
+        ctx.strokeStyle = Math.random() > 0.38 ? `rgba(255,255,255,${0.008 + Math.random() * 0.028 * strength})` : `rgba(0,0,0,${0.012 + Math.random() * 0.045 * strength})`;
+        ctx.lineWidth = 0.35 + Math.random() * 1.2; ctx.beginPath(); ctx.moveTo(x, y);
+        ctx.lineTo(x + Math.cos(angle) * len, y + Math.sin(angle) * len); ctx.stroke();
+      }
+      for (let i = 0; i < Math.floor(45 * strength); i++) {
+        const x = Math.random() * w, y = Math.random() * h, r = 8 + Math.random() * 48;
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, `rgba(8,7,6,${0.025 + Math.random() * 0.09 * strength})`); g.addColorStop(1, 'rgba(8,7,6,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    addLiminalWear(texWoodWall, 1.35); addLiminalWear(texGreyWood, 1.15); addLiminalWear(texDoorWood, 1.6);
+    addLiminalWear(texFrameWood, 1.25); addLiminalWear(texTableWood, 1.1); addLiminalWear(texSofaFabric, 1.2);
+    addLiminalWear(texBrushedMetal, 1.45); addLiminalWear(texDarkMetal, 1.15);
 
     // ENGINE SETUP
     const canvas = document.getElementById('renderCanvas');
@@ -557,6 +969,7 @@
     };
 
     let playerNode, headMesh, lArmMesh, rArmMesh, lLegMesh, rLegMesh;
+    let lArmPivot, rArmPivot, lLegPivot, rLegPivot;
     let walkAnimTime = 0;
     let avatarMaterials = {};
     let materials = {};
@@ -567,52 +980,249 @@
     let moveInput = { x: 0, z: 0 };
     let keysPressed = {};
 
+    // LOCAL AUDIO
+    let audioContext = null;
+    let radioAudio = null;
+    let radioSource = null;
+    let radioPanner = null;
+    let radioDryGain = null;
+    let radioEchoGain = null;
+    let radioDelay = null;
+    let radioNodePosition = new BABYLON.Vector3(0, 0, 0);
+    let audioUnlocked = false;
+
+    function ensureAudioContext() {
+      if (!audioContext) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        audioContext = new AC();
+      }
+      if (audioContext.state === 'suspended') audioContext.resume();
+      audioUnlocked = true;
+      return audioContext;
+    }
+
+    let radioMasterGain = null;
+    let radioEchoFilter = null;
+    let radioFeedback = null;
+
+    function setupRadioAudio(worldPosition) {
+      const ctx = ensureAudioContext();
+      if (!ctx || radioSource) return;
+      radioNodePosition.copyFrom(worldPosition);
+
+      radioAudio = new Audio("Radio_Static.mp3");
+      radioAudio.loop = true;
+      radioAudio.preload = "auto";
+      radioAudio.volume = 1;
+
+      radioSource = ctx.createMediaElementSource(radioAudio);
+      radioPanner = ctx.createPanner();
+      radioDryGain = ctx.createGain();
+      radioEchoGain = ctx.createGain();
+      radioDelay = ctx.createDelay(1.0);
+      radioFeedback = ctx.createGain();
+      radioEchoFilter = ctx.createBiquadFilter();
+      radioMasterGain = ctx.createGain();
+
+      radioPanner.panningModel = "HRTF";
+      radioPanner.distanceModel = "inverse";
+      radioPanner.refDistance = 1.3;
+      radioPanner.maxDistance = 10.5;
+      radioPanner.rolloffFactor = 0.9;
+
+      radioDryGain.gain.value = 0.66;
+      radioEchoGain.gain.value = 0.34;
+      radioDelay.delayTime.value = 0.24;
+      radioFeedback.gain.value = 0.22;
+      radioEchoFilter.type = "lowpass";
+      radioEchoFilter.frequency.value = 3200;
+      radioMasterGain.gain.value = 0;
+
+      radioSource.connect(radioPanner);
+      radioPanner.connect(radioDryGain);
+      radioDryGain.connect(radioMasterGain);
+
+      radioPanner.connect(radioDelay);
+      radioDelay.connect(radioEchoFilter);
+      radioEchoFilter.connect(radioEchoGain);
+      radioEchoGain.connect(radioMasterGain);
+      radioDelay.connect(radioFeedback);
+      radioFeedback.connect(radioDelay);
+
+      radioMasterGain.connect(ctx.destination);
+      radioAudio.play().catch(() => {});
+    }
+
+    function updateRadioAudio() {
+      if (!audioContext || !radioPanner || !radioMasterGain || !camera || !audioUnlocked) return;
+      const listener = audioContext.listener;
+      const p = radioNodePosition;
+      const c = camera.position;
+
+      if (listener.positionX) {
+        listener.positionX.value = c.x;
+        listener.positionY.value = c.y;
+        listener.positionZ.value = c.z;
+        radioPanner.positionX.value = p.x;
+        radioPanner.positionY.value = p.y;
+        radioPanner.positionZ.value = p.z;
+      } else {
+        listener.setPosition(c.x,c.y,c.z);
+        radioPanner.setPosition(p.x,p.y,p.z);
+      }
+
+      // Radio exists acoustically only in the spawn room. It fades out approaching the exit.
+      const spawnHalfLength = 8.0;
+      const absZ = Math.abs(c.z);
+      const distance = BABYLON.Vector3.Distance(c, p);
+      const roomFactor = absZ <= spawnHalfLength ? 1.0 : 0.0;
+      const edgeFade = roomFactor ? Math.min(1.0, Math.max(0.0, (spawnHalfLength - absZ) / 1.7)) : 0.0;
+      const distanceFactor = Math.min(1.0, Math.max(0.0, 1 - Math.max(0, distance - 1.0) / 8.2));
+      const target = roomFactor * edgeFade * distanceFactor;
+      radioMasterGain.gain.setTargetAtTime(target * 0.92, audioContext.currentTime, 0.075);
+    }
+
+    function playDoorSoundSequence(openCallback) {
+      const ctx = ensureAudioContext();
+      const audio = new Audio("Door_Open.mp3");
+      audio.preload = "auto";
+      audio.playbackRate = 0.72;
+
+      let source = null, delay = null, echoGain = null, dryGain = null, master = null, feedback = null, echoFilter = null;
+
+      const wire = () => {
+        if (!ctx || source) return;
+        source = ctx.createMediaElementSource(audio);
+        dryGain = ctx.createGain();
+        echoGain = ctx.createGain();
+        delay = ctx.createDelay(1.0);
+        master = ctx.createGain();
+        feedback = ctx.createGain();
+        echoFilter = ctx.createBiquadFilter();
+
+        dryGain.gain.value = 0.54;
+        echoGain.gain.value = 0.24;
+        master.gain.value = 0.78;
+        delay.delayTime.value = 0.22;
+        feedback.gain.value = 0.20;
+        echoFilter.type = "lowpass";
+        echoFilter.frequency.value = 2800;
+
+        source.connect(dryGain);
+        dryGain.connect(master);
+        source.connect(delay);
+        delay.connect(echoFilter);
+        echoFilter.connect(echoGain);
+        echoGain.connect(master);
+        delay.connect(feedback);
+        feedback.connect(delay);
+        master.connect(ctx.destination);
+      };
+
+      audio.addEventListener("canplay", () => {
+        wire();
+        audio.play().catch(() => {});
+        setTimeout(() => {
+          audio.pause();
+          // Mechanical pause before the second part of the sound.
+          setTimeout(() => {
+            const begin = () => {
+              const remainingSourceSeconds = Math.max(0.5, (audio.duration || 3.216) - audio.currentTime);
+              const realDuration = (remainingSourceSeconds / audio.playbackRate) * 1000;
+              openCallback(realDuration);
+            };
+            audio.addEventListener("play", begin, {once:true});
+            audio.play().catch(() => {});
+          }, 420);
+        }, 1000);
+      }, {once:true});
+      audio.load();
+    }
+
     function initGame() {
       scene = new BABYLON.Scene(engine);
-      scene.clearColor = new BABYLON.Color4(0.45, 0.72, 0.95, 1.0);
+      scene.clearColor = new BABYLON.Color4(0.07, 0.075, 0.08, 1.0);
+      scene.fogMode = BABYLON.Scene.FOGMODE_EXP2; scene.fogDensity = 0.008; scene.fogColor = new BABYLON.Color3(0.10,0.10,0.105);
 
       scene.collisionsEnabled = true;
       scene.gravity = new BABYLON.Vector3(0, -0.25, 0);
 
       const ambientLight = new BABYLON.HemisphericLight("ambientLight", new BABYLON.Vector3(0, 1, 0), scene);
-      ambientLight.intensity = 0.75;
+      ambientLight.intensity = 0.30; ambientLight.diffuse = new BABYLON.Color3(0.68,0.70,0.74); ambientLight.specular = new BABYLON.Color3(0.12,0.12,0.13);
 
       // MATERIALS (Non-reflective wood/walls/doors)
       materials.carpet = new BABYLON.StandardMaterial("mCarpet", scene);
-      materials.carpet.diffuseTexture = new BABYLON.Texture(texRedCarpet, scene);
+      materials.carpet.diffuseTexture = new BABYLON.Texture(dataUrl(texRedCarpet), scene);
       materials.carpet.diffuseTexture.uScale = 6;
       materials.carpet.diffuseTexture.vScale = 6;
+      materials.carpet.bumpTexture = new BABYLON.Texture(normalMapFromCanvas(texRedCarpet, 1.4), scene);
+      materials.carpet.bumpTexture.uScale = 6;
+      materials.carpet.bumpTexture.vScale = 6;
+      materials.carpet.bumpTexture.level = 0.6;
+      materials.carpet.specularColor = new BABYLON.Color3(0.03, 0.03, 0.03);
 
       materials.wallWood = new BABYLON.StandardMaterial("mWallWood", scene);
-      materials.wallWood.diffuseTexture = new BABYLON.Texture(texWoodWall, scene);
-      materials.wallWood.specularColor = new BABYLON.Color3(0, 0, 0);
+      materials.wallWood.diffuseTexture = new BABYLON.Texture(dataUrl(texWoodWall), scene);
+      materials.wallWood.diffuseTexture.uScale = 3;
+      materials.wallWood.diffuseTexture.vScale = 1.6;
+      materials.wallWood.bumpTexture = new BABYLON.Texture(normalMapFromCanvas(texWoodWall, 2.2), scene);
+      materials.wallWood.bumpTexture.uScale = 3;
+      materials.wallWood.bumpTexture.vScale = 1.6;
+      materials.wallWood.bumpTexture.level = 0.9;
+      materials.wallWood.specularColor = new BABYLON.Color3(0.04, 0.04, 0.04);
 
       materials.ceilingWood = new BABYLON.StandardMaterial("mCeilingWood", scene);
-      materials.ceilingWood.diffuseTexture = new BABYLON.Texture(texGreyWood, scene);
-      materials.ceilingWood.specularColor = new BABYLON.Color3(0, 0, 0);
+      materials.ceilingWood.diffuseTexture = new BABYLON.Texture(dataUrl(texWoodWall), scene);
+      materials.ceilingWood.diffuseTexture.uScale = 3;
+      materials.ceilingWood.diffuseTexture.vScale = 2.5;
+      materials.ceilingWood.bumpTexture = new BABYLON.Texture(normalMapFromCanvas(texWoodWall, 2.0), scene);
+      materials.ceilingWood.bumpTexture.uScale = 3;
+      materials.ceilingWood.bumpTexture.vScale = 2.5;
+      materials.ceilingWood.bumpTexture.level = 0.7;
+      materials.ceilingWood.specularColor = new BABYLON.Color3(0.04, 0.04, 0.04);
 
       materials.doorWood = new BABYLON.StandardMaterial("mDoorWood", scene);
-      materials.doorWood.diffuseTexture = new BABYLON.Texture(texDoorWood, scene);
-      materials.doorWood.specularColor = new BABYLON.Color3(0, 0, 0);
+      materials.doorWood.diffuseTexture = new BABYLON.Texture(dataUrl(texDoorWood), scene);
+      materials.doorWood.bumpTexture = new BABYLON.Texture(normalMapFromCanvas(texDoorWood, 2.0), scene);
+      materials.doorWood.bumpTexture.level = 0.7;
+      materials.doorWood.specularColor = new BABYLON.Color3(0.08, 0.08, 0.08);
+      materials.doorWood.specularPower = 32;
 
       materials.frameWood = new BABYLON.StandardMaterial("mFrameWood", scene);
-      materials.frameWood.diffuseTexture = new BABYLON.Texture(texFrameWood, scene);
+      materials.frameWood.diffuseTexture = new BABYLON.Texture(dataUrl(texFrameWood), scene);
       materials.frameWood.specularColor = new BABYLON.Color3(0, 0, 0);
 
       materials.tableWood = new BABYLON.StandardMaterial("mTableWood", scene);
-      materials.tableWood.diffuseTexture = new BABYLON.Texture(texTableWood, scene);
+      materials.tableWood.diffuseTexture = new BABYLON.Texture(dataUrl(texTableWood), scene);
+      materials.tableWood.bumpTexture = new BABYLON.Texture(normalMapFromCanvas(texTableWood, 1.6), scene);
+      materials.tableWood.bumpTexture.level = 0.5;
+      materials.tableWood.specularColor = new BABYLON.Color3(0.15, 0.15, 0.15);
+      materials.tableWood.specularPower = 48;
 
       materials.sofa = new BABYLON.StandardMaterial("mSofa", scene);
-      materials.sofa.diffuseTexture = new BABYLON.Texture(texSofaFabric, scene);
+      materials.sofa.diffuseTexture = new BABYLON.Texture(dataUrl(texSofaFabric), scene);
+      materials.sofa.diffuseTexture.uScale = 2;
+      materials.sofa.diffuseTexture.vScale = 2;
+      materials.sofa.bumpTexture = new BABYLON.Texture(normalMapFromCanvas(texSofaFabric, 1.2), scene);
+      materials.sofa.bumpTexture.uScale = 2;
+      materials.sofa.bumpTexture.vScale = 2;
+      materials.sofa.bumpTexture.level = 0.4;
+      materials.sofa.specularColor = new BABYLON.Color3(0, 0, 0);
 
       materials.leaf = new BABYLON.StandardMaterial("mLeaf", scene);
-      materials.leaf.diffuseTexture = new BABYLON.Texture(texPlantLeaf, scene);
+      materials.leaf.diffuseTexture = new BABYLON.Texture(dataUrl(texPlantLeaf), scene);
+      materials.leaf.specularColor = new BABYLON.Color3(0.05, 0.08, 0.05);
 
       materials.pot = new BABYLON.StandardMaterial("mPot", scene);
-      materials.pot.diffuseTexture = new BABYLON.Texture(texCeramicPot, scene);
+      materials.pot.diffuseTexture = new BABYLON.Texture(dataUrl(texCeramicPot), scene);
+      materials.pot.specularColor = new BABYLON.Color3(0.1, 0.08, 0.06);
 
       materials.cardboard = new BABYLON.StandardMaterial("mCardboard", scene);
-      materials.cardboard.diffuseTexture = new BABYLON.Texture(texCardboard, scene);
+      materials.cardboard.diffuseTexture = new BABYLON.Texture(dataUrl(texCardboard), scene);
+      materials.cardboard.bumpTexture = new BABYLON.Texture(normalMapFromCanvas(texCardboard, 1.3), scene);
+      materials.cardboard.bumpTexture.level = 0.35;
+      materials.cardboard.specularColor = new BABYLON.Color3(0, 0, 0);
 
       materials.plasticYellow = new BABYLON.StandardMaterial("mPlasticYellow", scene);
       materials.plasticYellow.diffuseColor = new BABYLON.Color3(0.95, 0.75, 0.1);
@@ -629,23 +1239,38 @@
       materials.duracellSilver.diffuseColor = new BABYLON.Color3(0.8, 0.8, 0.85);
 
       materials.glass = new BABYLON.StandardMaterial("mGlass", scene);
-      materials.glass.diffuseColor = new BABYLON.Color3(0.7, 0.9, 1.0);
-      materials.glass.alpha = 0.45;
+      materials.glass.diffuseColor = new BABYLON.Color3(0.92, 0.97, 1.0);
+      materials.glass.alpha = 0.08;
+      materials.glass.backFaceCulling = false;
+      materials.glass.disableLighting = true;
 
       materials.sky = new BABYLON.StandardMaterial("mSky", scene);
-      materials.sky.diffuseTexture = new BABYLON.Texture(texSkyDay, scene);
+      materials.sky.diffuseTexture = new BABYLON.Texture(dataUrl(texSkyDay), scene);
       materials.sky.emissiveTexture = materials.sky.diffuseTexture;
       materials.sky.disableLighting = true;
 
       materials.metalLocker = new BABYLON.StandardMaterial("mLocker", scene);
-      materials.metalLocker.diffuseColor = new BABYLON.Color3(0.35, 0.38, 0.42);
+      materials.metalLocker.diffuseTexture = new BABYLON.Texture(dataUrl(texBrushedMetal), scene);
+      materials.metalLocker.diffuseTexture.uScale = 1.4;
+      materials.metalLocker.diffuseTexture.vScale = 1.4;
+      materials.metalLocker.bumpTexture = new BABYLON.Texture(normalMapFromCanvas(texBrushedMetal, 1.8), scene);
+      materials.metalLocker.bumpTexture.uScale = 1.4;
+      materials.metalLocker.bumpTexture.vScale = 1.4;
+      materials.metalLocker.bumpTexture.level = 0.7;
+      materials.metalLocker.specularColor = new BABYLON.Color3(0.5, 0.5, 0.55);
+      materials.metalLocker.specularPower = 16;
 
       materials.metalRack = new BABYLON.StandardMaterial("mRack", scene);
-      materials.metalRack.diffuseColor = new BABYLON.Color3(0.2, 0.22, 0.25);
+      materials.metalRack.diffuseTexture = new BABYLON.Texture(dataUrl(texDarkMetal), scene);
+      materials.metalRack.bumpTexture = new BABYLON.Texture(normalMapFromCanvas(texDarkMetal, 1.6), scene);
+      materials.metalRack.bumpTexture.level = 0.6;
       materials.metalRack.specularColor = new BABYLON.Color3(0.4, 0.4, 0.4);
+      materials.metalRack.specularPower = 20;
 
       materials.metalDark = new BABYLON.StandardMaterial("mMetalDark", scene);
-      materials.metalDark.diffuseColor = new BABYLON.Color3(0.15, 0.15, 0.18);
+      materials.metalDark.diffuseTexture = new BABYLON.Texture(dataUrl(texDarkMetal), scene);
+      materials.metalDark.specularColor = new BABYLON.Color3(0.25, 0.25, 0.28);
+      materials.metalDark.specularPower = 18;
 
       materials.elevatorDoor = new BABYLON.StandardMaterial("mElevatorDoor", scene);
       materials.elevatorDoor.diffuseColor = new BABYLON.Color3(0.22, 0.24, 0.28);
@@ -700,25 +1325,49 @@
       torso.material = avatarMaterials.torso;
       torso.parent = playerNode;
 
+      // Limbs swing from pivots placed at the joint (shoulder / hip) instead
+      // of rotating the limb mesh about its own center. The pivot sits at
+      // the torso's edge, and each limb mesh is offset downward inside its
+      // pivot so the top of the limb stays locked to the torso while the
+      // bottom swings freely — a proper shoulder/hip hinge.
+      const shoulderY = 1.4; // top of torso
+      const hipY = 0.4;      // bottom of torso
+
+      lArmPivot = new BABYLON.TransformNode("lArmPivot", scene);
+      lArmPivot.position = new BABYLON.Vector3(-0.725, shoulderY, 0);
+      lArmPivot.parent = playerNode;
+
       lArmMesh = BABYLON.MeshBuilder.CreateBox("lArm", { width: 0.45, height: 1.0, depth: 0.45 }, scene);
-      lArmMesh.position = new BABYLON.Vector3(-0.725, 0.9, 0);
+      lArmMesh.position = new BABYLON.Vector3(0, -0.5, 0);
       lArmMesh.material = avatarMaterials.lArm;
-      lArmMesh.parent = playerNode;
+      lArmMesh.parent = lArmPivot;
+
+      rArmPivot = new BABYLON.TransformNode("rArmPivot", scene);
+      rArmPivot.position = new BABYLON.Vector3(0.725, shoulderY, 0);
+      rArmPivot.parent = playerNode;
 
       rArmMesh = BABYLON.MeshBuilder.CreateBox("rArm", { width: 0.45, height: 1.0, depth: 0.45 }, scene);
-      rArmMesh.position = new BABYLON.Vector3(0.725, 0.9, 0);
+      rArmMesh.position = new BABYLON.Vector3(0, -0.5, 0);
       rArmMesh.material = avatarMaterials.rArm;
-      rArmMesh.parent = playerNode;
+      rArmMesh.parent = rArmPivot;
+
+      lLegPivot = new BABYLON.TransformNode("lLegPivot", scene);
+      lLegPivot.position = new BABYLON.Vector3(-0.25, hipY, 0);
+      lLegPivot.parent = playerNode;
 
       lLegMesh = BABYLON.MeshBuilder.CreateBox("lLeg", { width: 0.45, height: 1.0, depth: 0.45 }, scene);
-      lLegMesh.position = new BABYLON.Vector3(-0.25, -0.1, 0);
+      lLegMesh.position = new BABYLON.Vector3(0, -0.5, 0);
       lLegMesh.material = avatarMaterials.lLeg;
-      lLegMesh.parent = playerNode;
+      lLegMesh.parent = lLegPivot;
+
+      rLegPivot = new BABYLON.TransformNode("rLegPivot", scene);
+      rLegPivot.position = new BABYLON.Vector3(0.25, hipY, 0);
+      rLegPivot.parent = playerNode;
 
       rLegMesh = BABYLON.MeshBuilder.CreateBox("rLeg", { width: 0.45, height: 1.0, depth: 0.45 }, scene);
-      rLegMesh.position = new BABYLON.Vector3(0.25, -0.1, 0);
+      rLegMesh.position = new BABYLON.Vector3(0, -0.5, 0);
       rLegMesh.material = avatarMaterials.rLeg;
-      rLegMesh.parent = playerNode;
+      rLegMesh.parent = rLegPivot;
     }
 
     function applyAvatarColors() {
@@ -730,21 +1379,56 @@
       avatarMaterials.rLeg.diffuseColor = BABYLON.Color3.FromHexString(playerState.colors.rLeg);
     }
 
-    // ALWAYS-CENTERED FLASHLIGHT
-    let flashlightSpot, flashlightMesh;
-
+    // HEAD-MOUNTED FLASHLIGHT / HEADLAMP
+    // The physical lamp is modeled on the player but hidden from first-person view.
+    // Only the light itself is visible through its illumination, and it sits above the eyes.
+    let flashlightSpot, flashlightPoint, flashlightMesh, headlampBand, headlampHousing, headlampLens;
+    let flashlightBobTime = 0;
     function setupFlashlight() {
-      flashlightSpot = new BABYLON.SpotLight("flSpot", new BABYLON.Vector3(0, 0, 0), new BABYLON.Vector3(0, 0, 1), Math.PI / 3.2, 12, scene);
+      flashlightSpot = new BABYLON.SpotLight(
+        "flSpot",
+        new BABYLON.Vector3(0,0.68,0.02),
+        new BABYLON.Vector3(0,0,1),
+        Math.PI / 6.4,
+        32,
+        scene
+      );
       flashlightSpot.intensity = 0;
-      flashlightSpot.diffuse = new BABYLON.Color3(1, 0.95, 0.82);
+      flashlightSpot.diffuse = new BABYLON.Color3(1.0,0.97,0.88);
+      flashlightSpot.specular = new BABYLON.Color3(0.22,0.20,0.15);
       flashlightSpot.parent = camera;
 
-      flashlightMesh = BABYLON.MeshBuilder.CreateCylinder("flMesh", { diameter: 0.1, height: 0.45 }, scene);
-      flashlightMesh.rotation.x = Math.PI / 2;
-      flashlightMesh.material = materials.duracellBlack;
-      flashlightMesh.parent = camera;
-      flashlightMesh.position = new BABYLON.Vector3(0.3, -0.25, 0.45);
-      flashlightMesh.setEnabled(false);
+      flashlightPoint = new BABYLON.PointLight("flPoint", new BABYLON.Vector3(0,0.75,0.02), scene);
+      flashlightPoint.intensity = 0;
+      flashlightPoint.range = 3.2;
+      flashlightPoint.diffuse = new BABYLON.Color3(1.0,0.91,0.74);
+      flashlightPoint.specular = new BABYLON.Color3(0.10,0.08,0.05);
+      flashlightPoint.parent = camera;
+
+      // First-person model is intentionally kept disabled so it cannot become an on-screen overlay.
+      headlampBand = BABYLON.MeshBuilder.CreateTorus("headlampBand", {diameter:1.0, thickness:0.055, tessellation:32}, scene);
+      headlampBand.scaling.y = 0.64;
+      headlampBand.position = new BABYLON.Vector3(0,0.92,0.0);
+      headlampBand.material = materials.duracellBlack;
+      headlampBand.parent = playerNode;
+
+      headlampHousing = BABYLON.MeshBuilder.CreateBox("headlampHousing", {width:0.34,height:0.18,depth:0.16}, scene);
+      headlampHousing.position = new BABYLON.Vector3(0,2.30,0.08);
+      headlampHousing.material = materials.metalDark;
+      headlampHousing.parent = playerNode;
+
+      headlampLens = BABYLON.MeshBuilder.CreateCylinder("headlampLens", {diameter:0.11,height:0.05}, scene);
+      headlampLens.rotation.x = Math.PI/2;
+      headlampLens.position = new BABYLON.Vector3(0,2.30,0.175);
+      const lensMat = new BABYLON.StandardMaterial("headlampLensMat", scene);
+      lensMat.diffuseColor = new BABYLON.Color3(0.95,0.95,0.88);
+      lensMat.emissiveColor = new BABYLON.Color3(0.30,0.26,0.18);
+      lensMat.specularColor = new BABYLON.Color3(0.16,0.16,0.12);
+      headlampLens.material = lensMat;
+      headlampLens.parent = playerNode;
+
+      flashlightMesh = headlampHousing;
+      headlampBand.setEnabled(false); headlampHousing.setEnabled(false); headlampLens.setEnabled(false);
     }
 
     // DOOR FRAME
@@ -839,19 +1523,53 @@
       signMesh.material = signMat;
       signMesh.parent = elNode;
 
-      const plank1 = BABYLON.MeshBuilder.CreateBox("elPlank1", { width: 3.2, height: 0.22, depth: 0.08 }, scene);
-      plank1.position = new BABYLON.Vector3(0, 1.5, 0.2);
-      plank1.rotation.z = 0.1;
-      plank1.material = materials.frameWood;
-      plank1.checkCollisions = true;
-      plank1.parent = elNode;
+      // Properly mounted above the elevator header, fully in front of the metal frame.
+      const screenFrame = BABYLON.MeshBuilder.CreateBox("elScreenFrame", { width: 2.6, height: 0.76, depth: 0.12 }, scene);
+      screenFrame.position = new BABYLON.Vector3(0, 6.05, 0.28);
+      screenFrame.material = materials.metalDark;
+      screenFrame.parent = elNode;
 
-      const plank2 = BABYLON.MeshBuilder.CreateBox("elPlank2", { width: 3.2, height: 0.22, depth: 0.08 }, scene);
-      plank2.position = new BABYLON.Vector3(0, 2.4, 0.2);
-      plank2.rotation.z = -0.08;
-      plank2.material = materials.frameWood;
-      plank2.checkCollisions = true;
-      plank2.parent = elNode;
+      signMesh.position = new BABYLON.Vector3(0, 6.05, 0.36);
+
+      const screenGlow = new BABYLON.PointLight("elScreenGlow", new BABYLON.Vector3(0, 6.05, 0.52), scene);
+      screenGlow.diffuse = new BABYLON.Color3(1.0, 0.04, 0.02);
+      screenGlow.specular = new BABYLON.Color3(0.15, 0.01, 0.01);
+      screenGlow.range = 4.5;
+      screenGlow.intensity = 0.16;
+      screenGlow.parent = elNode;
+
+      scene.onBeforeRenderObservable.add(() => {
+        if (Math.random() < 0.006) {
+          const flicker = 0.55 + Math.random() * 0.45;
+          signMat.emissiveColor = new BABYLON.Color3(0.8 * flicker, 0.015 * flicker, 0.01);
+          screenGlow.intensity = 0.10 + Math.random() * 0.10;
+        }
+      });
+
+      // Hazard tape replacing the old wood planks.
+      const tapeTexture = new BABYLON.DynamicTexture("elevatorWarningTapeTex", {width:512,height:96}, scene);
+      const tctx = tapeTexture.getContext();
+      tctx.fillStyle = "#e5b900"; tctx.fillRect(0,0,512,96);
+      tctx.fillStyle = "#151515";
+      for (let x=-40; x<560; x+=80) {
+        tctx.save();
+        tctx.translate(x,0);
+        tctx.rotate(-0.55);
+        tctx.fillRect(0,-50,28,200);
+        tctx.restore();
+      }
+      tapeTexture.update();
+      const warningMat = new BABYLON.StandardMaterial("warningTapeMat", scene);
+      warningMat.diffuseTexture = tapeTexture;
+      warningMat.emissiveColor = new BABYLON.Color3(0.08,0.06,0.01);
+      warningMat.specularColor = new BABYLON.Color3(0.04,0.04,0.04);
+
+      [1.55, 2.35].forEach((yy, idx) => {
+        const tape = BABYLON.MeshBuilder.CreateBox("warningTape_"+idx, { width: 3.2, height: 0.26, depth: 0.09 }, scene);
+        tape.position = new BABYLON.Vector3(0, yy, 0.23);
+        tape.material = warningMat;
+        tape.parent = elNode;
+      });
     }
 
     // FURNITURE & DECORATIONS
@@ -917,11 +1635,93 @@
       pot.checkCollisions = true;
       pot.parent = pNode;
 
-      const plantLeaves = BABYLON.MeshBuilder.CreateSphere("leaves", { diameter: 1.3, segments: 6 }, scene);
-      plantLeaves.position.y = 1.2;
-      plantLeaves.material = materials.leaf;
-      plantLeaves.checkCollisions = true;
-      plantLeaves.parent = pNode;
+      // Loose grass-like leaves instead of a perfectly round hedge ball.
+      for (let i = 0; i < 28; i++) {
+        const blade = BABYLON.MeshBuilder.CreatePlane("grassBlade", { width: 0.08 + Math.random()*0.06, height: 0.55 + Math.random()*0.5 }, scene);
+        const angle = Math.random()*Math.PI*2;
+        const radius = Math.random()*0.26;
+        blade.position = new BABYLON.Vector3(
+          Math.cos(angle)*radius,
+          0.93 + Math.random()*0.20,
+          Math.sin(angle)*radius
+        );
+        blade.rotation.y = angle;
+        blade.rotation.z = (Math.random()-0.5)*0.35;
+        blade.material = materials.leaf;
+        blade.isPickable = false;
+        blade.parent = pNode;
+      }
+    }
+
+    function buildRadio(parent, localPos) {
+      const radioNode = new BABYLON.TransformNode("radio", scene);
+      radioNode.position = localPos;
+      radioNode.parent = parent;
+      radioNode.rotation.y = Math.PI / 4;
+
+      const body = BABYLON.MeshBuilder.CreateBox("radioBody", {width:0.8, height:0.42, depth:0.42}, scene);
+      body.material = materials.metalDark;
+      body.parent = radioNode;
+
+      const front = BABYLON.MeshBuilder.CreateBox("radioFront", {width:0.62, height:0.23, depth:0.05}, scene);
+      front.position = new BABYLON.Vector3(0,0.02,0.235);
+      const frontMat = new BABYLON.StandardMaterial("radioFrontMat", scene);
+      frontMat.diffuseColor = new BABYLON.Color3(0.055,0.055,0.06);
+      front.material = frontMat;
+      front.parent = radioNode;
+
+      const speaker = BABYLON.MeshBuilder.CreateCylinder("radioSpeaker", {diameter:0.16, height:0.045, tessellation:24}, scene);
+      speaker.rotation.x = Math.PI/2;
+      speaker.position = new BABYLON.Vector3(-0.18,0.02,0.27);
+      speaker.material = materials.blackGrid;
+      speaker.parent = radioNode;
+
+      const knob1 = BABYLON.MeshBuilder.CreateCylinder("radioKnob1", {diameter:0.09, height:0.05, tessellation:18}, scene);
+      knob1.rotation.x = Math.PI/2;
+      knob1.position = new BABYLON.Vector3(0.18,0.05,0.27);
+      knob1.material = materials.metalLocker;
+      knob1.parent = radioNode;
+
+      const knob2 = BABYLON.MeshBuilder.CreateCylinder("radioKnob2", {diameter:0.07, height:0.05, tessellation:18}, scene);
+      knob2.rotation.x = Math.PI/2;
+      knob2.position = new BABYLON.Vector3(0.29,-0.06,0.27);
+      knob2.material = materials.metalLocker;
+      knob2.parent = radioNode;
+
+      const dialLight = BABYLON.MeshBuilder.CreatePlane("radioDial", {width:0.24,height:0.04}, scene);
+      dialLight.position = new BABYLON.Vector3(0.17,-0.05,0.268);
+      const dialMat = new BABYLON.StandardMaterial("radioDialMat", scene);
+      dialMat.diffuseColor = new BABYLON.Color3(0.12,0.30,0.18);
+      dialMat.emissiveColor = new BABYLON.Color3(0.08,0.24,0.12);
+      dialLight.material = dialMat;
+      dialLight.parent = radioNode;
+
+      const radioWorld = radioNode.absolutePosition.clone();
+      setTimeout(() => setupRadioAudio(radioWorld), 0);
+      return radioNode;
+    }
+
+    function buildSpawnRadioTable(parent, localPos) {
+      const tableNode = new BABYLON.TransformNode("spawnRadioTable", scene);
+      tableNode.position = localPos;
+      tableNode.parent = parent;
+
+      const top = BABYLON.MeshBuilder.CreateBox("spawnRadioTableTop", {width:1.35,height:0.14,depth:1.35}, scene);
+      top.position.y = 1.2;
+      top.material = materials.tableWood;
+      top.checkCollisions = true;
+      top.parent = tableNode;
+
+      [[-0.52,0.6,-0.52],[0.52,0.6,-0.52],[-0.52,0.6,0.52],[0.52,0.6,0.52]].forEach(p => {
+        const leg = BABYLON.MeshBuilder.CreateBox("spawnRadioTableLeg", {width:0.12,height:1.2,depth:0.12}, scene);
+        leg.position = new BABYLON.Vector3(p[0],p[1],p[2]);
+        leg.material = materials.tableWood;
+        leg.checkCollisions = true;
+        leg.parent = tableNode;
+      });
+
+      const radio = buildRadio(tableNode, new BABYLON.Vector3(0,1.45,0));
+      return {tableNode, radio};
     }
 
     // INDUSTRIAL SHELF RACK (NON-OVERLAPPING BOXES)
@@ -1018,82 +1818,81 @@
       lockerGroup.rotation.y = rotY;
       lockerGroup.parent = parentRoom;
 
-      const lockerW = 1.4, lockerH = 2.4, lockerD = 1.2;
+      // Wider interior so the player's collision ellipsoid can actually enter.
+      const lockerW = 2.6, lockerH = 2.6, lockerD = 1.7;
+      const pedestalH = 0.06;
 
-      const basePedestal = BABYLON.MeshBuilder.CreateBox("lBase", { width: lockerW + 0.1, height: 0.3, depth: lockerD + 0.1 }, scene);
-      basePedestal.position = new BABYLON.Vector3(0, 0.15, 0);
+      const basePedestal = BABYLON.MeshBuilder.CreateBox("lBase", { width: lockerW, height: pedestalH, depth: lockerD }, scene);
+      basePedestal.position = new BABYLON.Vector3(0, pedestalH/2, 0);
       basePedestal.material = materials.metalDark;
       basePedestal.checkCollisions = true;
       basePedestal.parent = lockerGroup;
 
-      const cabinetY = 0.3 + (lockerH - 0.3) / 2;
+      const cabinetY = pedestalH + (lockerH-pedestalH)/2;
 
-      const backWall = BABYLON.MeshBuilder.CreateBox("lBack", { width: lockerW, height: lockerH - 0.3, depth: 0.08 }, scene);
-      backWall.position = new BABYLON.Vector3(0, cabinetY, -lockerD / 2 + 0.04);
-      backWall.material = materials.metalLocker;
-      backWall.checkCollisions = true;
-      backWall.parent = lockerGroup;
+      const backWall = BABYLON.MeshBuilder.CreateBox("lBack", { width: lockerW, height: lockerH-pedestalH, depth: 0.08 }, scene);
+      backWall.position = new BABYLON.Vector3(0, cabinetY, -lockerD/2+0.04);
+      backWall.material = materials.metalLocker; backWall.checkCollisions = true; backWall.parent = lockerGroup;
 
-      const leftWall = BABYLON.MeshBuilder.CreateBox("lLeft", { width: 0.08, height: lockerH - 0.3, depth: lockerD }, scene);
-      leftWall.position = new BABYLON.Vector3(-lockerW / 2 + 0.04, cabinetY, 0);
-      leftWall.material = materials.metalLocker;
-      leftWall.checkCollisions = true;
-      leftWall.parent = lockerGroup;
+      const leftWall = BABYLON.MeshBuilder.CreateBox("lLeft", { width: 0.08, height: lockerH-pedestalH, depth: lockerD }, scene);
+      leftWall.position = new BABYLON.Vector3(-lockerW/2+0.04, cabinetY, 0);
+      leftWall.material = materials.metalLocker; leftWall.checkCollisions = true; leftWall.parent = lockerGroup;
 
-      const rightWall = BABYLON.MeshBuilder.CreateBox("lRight", { width: 0.08, height: lockerH - 0.3, depth: lockerD }, scene);
-      rightWall.position = new BABYLON.Vector3(lockerW / 2 - 0.04, cabinetY, 0);
-      rightWall.material = materials.metalLocker;
-      rightWall.checkCollisions = true;
-      rightWall.parent = lockerGroup;
+      const rightWall = BABYLON.MeshBuilder.CreateBox("lRight", { width: 0.08, height: lockerH-pedestalH, depth: lockerD }, scene);
+      rightWall.position = new BABYLON.Vector3(lockerW/2-0.04, cabinetY, 0);
+      rightWall.material = materials.metalLocker; rightWall.checkCollisions = true; rightWall.parent = lockerGroup;
 
       const topRoof = BABYLON.MeshBuilder.CreateBox("lTop", { width: lockerW, height: 0.08, depth: lockerD }, scene);
-      topRoof.position = new BABYLON.Vector3(0, lockerH - 0.04, 0);
-      topRoof.material = materials.metalLocker;
-      topRoof.checkCollisions = true;
-      topRoof.parent = lockerGroup;
+      topRoof.position = new BABYLON.Vector3(0, lockerH-0.04, 0);
+      topRoof.material = materials.metalLocker; topRoof.checkCollisions = true; topRoof.parent = lockerGroup;
 
       const doorPivot = new BABYLON.TransformNode("lockerDoorPivot", scene);
-      doorPivot.position = new BABYLON.Vector3(-lockerW / 2 + 0.05, cabinetY, lockerD / 2 - 0.05);
+      doorPivot.position = new BABYLON.Vector3(-lockerW/2+0.05, cabinetY, lockerD/2-0.05);
       doorPivot.parent = lockerGroup;
 
-      const doorFrameWidth = lockerW - 0.1;
-      const doorFrameHeight = lockerH - 0.35;
+      const doorFrameWidth = lockerW-0.1;
+      const doorFrameHeight = lockerH-pedestalH-0.05;
 
-      const doorLower = BABYLON.MeshBuilder.CreateBox("dLower", { width: doorFrameWidth, height: doorFrameHeight - 0.7, depth: 0.06 }, scene);
-      doorLower.position = new BABYLON.Vector3(doorFrameWidth / 2, -(0.7 / 2), 0);
-      doorLower.material = materials.metalLocker;
-      doorLower.checkCollisions = true;
-      doorLower.parent = doorPivot;
+      const doorLower = BABYLON.MeshBuilder.CreateBox("dLower", {
+        width: doorFrameWidth, height: doorFrameHeight-0.7, depth: 0.06
+      }, scene);
+      doorLower.position = new BABYLON.Vector3(doorFrameWidth/2, -(0.7/2), 0);
+      doorLower.material = materials.metalLocker; doorLower.checkCollisions = true; doorLower.parent = doorPivot;
 
       const doorTopBorder = BABYLON.MeshBuilder.CreateBox("dTopBorder", { width: doorFrameWidth, height: 0.15, depth: 0.06 }, scene);
-      doorTopBorder.position = new BABYLON.Vector3(doorFrameWidth / 2, doorFrameHeight / 2 - 0.075, 0);
-      doorTopBorder.material = materials.metalLocker;
-      doorTopBorder.checkCollisions = true;
-      doorTopBorder.parent = doorPivot;
+      doorTopBorder.position = new BABYLON.Vector3(doorFrameWidth/2, doorFrameHeight/2-0.075, 0);
+      doorTopBorder.material = materials.metalLocker; doorTopBorder.checkCollisions = true; doorTopBorder.parent = doorPivot;
 
       const doorLeftBorder = BABYLON.MeshBuilder.CreateBox("dLBorder", { width: 0.2, height: 0.55, depth: 0.06 }, scene);
-      doorLeftBorder.position = new BABYLON.Vector3(0.1, doorFrameHeight / 2 - 0.425, 0);
-      doorLeftBorder.material = materials.metalLocker;
-      doorLeftBorder.checkCollisions = true;
-      doorLeftBorder.parent = doorPivot;
+      doorLeftBorder.position = new BABYLON.Vector3(0.1, doorFrameHeight/2-0.425, 0);
+      doorLeftBorder.material = materials.metalLocker; doorLeftBorder.checkCollisions = true; doorLeftBorder.parent = doorPivot;
 
       const doorRightBorder = BABYLON.MeshBuilder.CreateBox("dRBorder", { width: 0.2, height: 0.55, depth: 0.06 }, scene);
-      doorRightBorder.position = new BABYLON.Vector3(doorFrameWidth - 0.1, doorFrameHeight / 2 - 0.425, 0);
-      doorRightBorder.material = materials.metalLocker;
-      doorRightBorder.checkCollisions = true;
-      doorRightBorder.parent = doorPivot;
+      doorRightBorder.position = new BABYLON.Vector3(doorFrameWidth-0.1, doorFrameHeight/2-0.425, 0);
+      doorRightBorder.material = materials.metalLocker; doorRightBorder.checkCollisions = true; doorRightBorder.parent = doorPivot;
 
-      const ventSlatYPositions = [doorFrameHeight / 2 - 0.22, doorFrameHeight / 2 - 0.35, doorFrameHeight / 2 - 0.48];
+      const ventSlatYPositions = [doorFrameHeight/2-0.22, doorFrameHeight/2-0.35, doorFrameHeight/2-0.48];
+      const ventSlats = [];
       ventSlatYPositions.forEach(sy => {
-        const slat = BABYLON.MeshBuilder.CreateBox("vSlat", { width: doorFrameWidth - 0.4, height: 0.05, depth: 0.05 }, scene);
-        slat.position = new BABYLON.Vector3(doorFrameWidth / 2, sy, 0);
+        const slat = BABYLON.MeshBuilder.CreateBox("vSlat", { width: doorFrameWidth-0.4, height: 0.05, depth: 0.05 }, scene);
+        slat.position = new BABYLON.Vector3(doorFrameWidth/2, sy, 0);
         slat.rotation.x = 0.3;
         slat.material = materials.metalLocker;
         slat.parent = doorPivot;
+        slat.checkCollisions = false;
+        ventSlats.push(slat);
       });
+
+      // Simple locker handle / knob.
+      const handle = BABYLON.MeshBuilder.CreateCylinder("lockerHandle", { diameter: 0.10, height: 0.12, tessellation: 16 }, scene);
+      handle.rotation.x = Math.PI/2;
+      handle.position = new BABYLON.Vector3(doorFrameWidth-0.28, 0.1, -0.06);
+      handle.material = materials.metalDark;
+      handle.parent = doorPivot;
 
       let isOpen = false;
       let lockerEntry = null;
+      const doorCollisionParts = [doorLower, doorTopBorder, doorLeftBorder, doorRightBorder];
 
       lockerEntry = {
         mesh: doorLower,
@@ -1104,18 +1903,31 @@
           isOpen = !isOpen;
           lockerEntry.prompt = isOpen ? "Close Locker" : "Open Locker";
 
-          const targetRot = isOpen ? -Math.PI / 2.1 : 0;
+          const targetRot = isOpen ? -Math.PI/2.1 : 0;
           const startRot = doorPivot.rotation.y;
+          if (isOpen) doorCollisionParts.forEach(m => m.checkCollisions = false);
 
           BABYLON.Animation.CreateAndStartAnimation(
             "lockerDoorSwing", doorPivot, "rotation.y", 30, 15,
-            startRot, targetRot,
-            BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
+            startRot, targetRot, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT,
+            null,
+            () => {
+              if (!isOpen) doorCollisionParts.forEach(m => m.checkCollisions = true);
+            }
           );
         }
       };
-
       interactables.push(lockerEntry);
+
+      // 20% chance of a battery sitting directly on the locker base, inside the cabinet.
+      if (Math.random() < 0.20) {
+        buildBatteryPickup(lockerGroup, new BABYLON.Vector3(
+          (Math.random()-0.5) * 0.95,
+          0.20,
+          -0.36 + (Math.random()-0.5)*0.14
+        ));
+      }
+      return lockerGroup;
     }
 
     // DURACELL BATTERY PICKUP
@@ -1275,11 +2087,48 @@
       skyPlane.material = materials.sky;
       skyPlane.parent = roomGroup;
 
+      // Layered moon shafts through the skylight: soft, wide, translucent cones with a central glow.
+      const moonRayMat = new BABYLON.StandardMaterial("moonRayMat", scene);
+      moonRayMat.diffuseColor = new BABYLON.Color3(0.62,0.72,0.96);
+      moonRayMat.emissiveColor = new BABYLON.Color3(0.09,0.12,0.22);
+      moonRayMat.alpha = 0.028;
+      moonRayMat.backFaceCulling = false;
+      moonRayMat.disableLighting = true;
+
+      [
+        {x:-0.75,z:-0.75,scale:1.0,rotX:0.12,rotZ:-0.09,alpha:0.020},
+        {x:0.55,z:0.45,scale:0.75,rotX:-0.10,rotZ:0.07,alpha:0.016},
+        {x:0.0,z:0.0,scale:0.48,rotX:0.03,rotZ:-0.02,alpha:0.022}
+      ].forEach((ray,idx)=>{
+        const mat = moonRayMat.clone("moonRayMat"+idx);
+        mat.alpha = ray.alpha;
+        const shaft = BABYLON.MeshBuilder.CreateCylinder("moonShaft_"+idx,
+          {diameterTop:0.38*ray.scale, diameterBottom:2.7*ray.scale, height:5.6, tessellation:48}, scene);
+        shaft.position = new BABYLON.Vector3(ray.x, roomHeight-2.82, ray.z);
+        shaft.rotation.x = ray.rotX;
+        shaft.rotation.z = ray.rotZ;
+        shaft.material = mat;
+        shaft.parent = roomGroup;
+      });
+
+      const skylightGlow = new BABYLON.PointLight("skylightGlow", new BABYLON.Vector3(0,roomHeight-0.25,0), scene);
+      skylightGlow.intensity = 0.18;
+      skylightGlow.range = 8;
+      skylightGlow.diffuse = new BABYLON.Color3(0.48,0.58,0.90);
+      skylightGlow.specular = new BABYLON.Color3(0.08,0.10,0.15);
+      skylightGlow.parent = roomGroup;
+
+      const spawnLight = new BABYLON.PointLight("spawnRoomLight", new BABYLON.Vector3(0,roomHeight-1.0,0), scene);
+      spawnLight.intensity = 0.38;
+      spawnLight.range = 18;
+      spawnLight.diffuse = new BABYLON.Color3(0.78,0.78,0.74);
+      spawnLight.specular = new BABYLON.Color3(0.15,0.15,0.15);
+      spawnLight.parent = roomGroup;
+
       const leftSofa = createSofa(roomGroup, new BABYLON.Vector3(-roomWidth / 2 + 1.2, 0.5, 0), roomLength - 6, false);
       const rightSofa = createSofa(roomGroup, new BABYLON.Vector3(roomWidth / 2 - 1.2, 0.5, 0), roomLength - 6, true);
 
-      buildCornerTable(roomGroup, new BABYLON.Vector3(-roomWidth / 2 + 1.5, 0, -roomLength / 2 + 1.5), true);
-      buildCornerTable(roomGroup, new BABYLON.Vector3(roomWidth / 2 - 1.5, 0, -roomLength / 2 + 1.5), true);
+      buildSpawnRadioTable(roomGroup, new BABYLON.Vector3(-roomWidth / 2 + 1.55, 0, -roomLength / 2 + 1.55));
 
       interactables.push({
         mesh: leftSofa,
@@ -1317,6 +2166,15 @@
       back.checkCollisions = true;
       back.parent = sofaNode;
 
+      // Proper upholstered arm rests at both ends.
+      [-1, 1].forEach((end, idx) => {
+        const arm = BABYLON.MeshBuilder.CreateBox("sofaArm_"+idx, {width:1.72,height:0.78,depth:0.30}, scene);
+        arm.position = new BABYLON.Vector3(0,0.72,end*(length/2-0.16));
+        arm.material = materials.sofa;
+        arm.checkCollisions = true;
+        arm.parent = sofaNode;
+      });
+
       return seat;
     }
 
@@ -1333,6 +2191,18 @@
       doorMesh.checkCollisions = true;
       doorMesh.parent = doorPivot;
 
+      // Every door gets a real, simple metal doorknob.
+      const knobBack = BABYLON.MeshBuilder.CreateCylinder("doorKnobBack", {diameter:0.18,height:0.035,tessellation:20}, scene);
+      knobBack.rotation.x = Math.PI/2;
+      knobBack.position = new BABYLON.Vector3(2.0,2.02,-0.11);
+      knobBack.material = materials.metalDark;
+      knobBack.parent = doorPivot;
+
+      const knob = BABYLON.MeshBuilder.CreateSphere("doorKnob", {diameter:0.13,segments:20}, scene);
+      knob.position = new BABYLON.Vector3(2.04,2.02,-0.19);
+      knob.material = materials.metalLocker;
+      knob.parent = doorPivot;
+
       const signMesh = BABYLON.MeshBuilder.CreateBox("signMesh", { width: 1.6, height: 0.6, depth: 0.08 }, scene);
       signMesh.position = localPos.add(new BABYLON.Vector3(0, 4.85, -0.15));
       signMesh.material = materials.plasticYellow;
@@ -1346,6 +2216,7 @@
       signMesh.material = signMat;
 
       let doorInteractionEntry = null;
+      let opening = false;
 
       doorInteractionEntry = {
         mesh: doorMesh,
@@ -1353,6 +2224,9 @@
         distance: 3.5,
         prompt: "Open Door",
         action: () => {
+          if (opening) return;
+          opening = true;
+
           const idx = interactables.indexOf(doorInteractionEntry);
           if (idx !== -1) interactables.splice(idx, 1);
           if (currentPromptTarget === doorInteractionEntry) {
@@ -1360,16 +2234,22 @@
             document.getElementById('interactionPrompt').style.display = 'none';
           }
 
-          BABYLON.Animation.CreateAndStartAnimation(
-            "doorOpen", doorPivot, "rotation.y", 30, 20, 0, -Math.PI / 2,
-            BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
-          );
           doorMesh.checkCollisions = false;
 
-          if (playerState.currentRoomIndex === roomIndex) {
-            playerState.currentRoomIndex++;
-            generateNextRoom(parentRoom.position.z + localPos.z, playerState.currentRoomIndex);
-          }
+          playDoorSoundSequence((openDuration) => {
+            // Generate the next room immediately as the door begins its slow opening.
+            if (playerState.currentRoomIndex === roomIndex) {
+              playerState.currentRoomIndex++;
+              generateNextRoom(parentRoom.position.z + localPos.z, playerState.currentRoomIndex);
+            }
+
+            BABYLON.Animation.CreateAndStartAnimation(
+              "doorOpen", doorPivot, "rotation.y", 30,
+              Math.round(Math.max(40, openDuration / 1000 * 30)),
+              0, -Math.PI/2,
+              BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
+            );
+          });
         }
       };
 
@@ -1454,39 +2334,51 @@
       const signLabel = "A-" + String(roomIndex).padStart(3, '0');
       buildDoor(roomGroup, new BABYLON.Vector3(0, 0, roomLength / 2), signLabel, roomIndex);
 
+      // Batteries may only spawn on explicitly registered solid surfaces.
       const surfaceSpawnLocations = [];
-      surfaceSpawnLocations.push(new BABYLON.Vector3((Math.random() - 0.5) * (roomWidth - 4), 0.15, (Math.random() - 0.5) * (roomLength - 4)));
 
-      const corner1 = buildCornerTable(roomGroup, new BABYLON.Vector3(-roomWidth / 2 + 1.2, 0, -roomLength / 2 + 1.2), Math.random() < 0.5);
-      const corner2 = buildCornerTable(roomGroup, new BABYLON.Vector3(roomWidth / 2 - 1.2, 0, -roomLength / 2 + 1.2), Math.random() < 0.5);
-      surfaceSpawnLocations.push(corner1.absolutePosition.add(new BABYLON.Vector3(0, 0.12, 0)));
-      surfaceSpawnLocations.push(corner2.absolutePosition.add(new BABYLON.Vector3(0, 0.12, 0)));
+      const corner1HasPlant = Math.random() < 0.5;
+      const corner2HasPlant = Math.random() < 0.5;
+      const corner1 = buildCornerTable(roomGroup, new BABYLON.Vector3(-roomWidth / 2 + 1.2, 0, -roomLength / 2 + 1.2), corner1HasPlant);
+      const corner2 = buildCornerTable(roomGroup, new BABYLON.Vector3(roomWidth / 2 - 1.2, 0, -roomLength / 2 + 1.2), corner2HasPlant);
+      if (!corner1HasPlant) surfaceSpawnLocations.push(corner1.absolutePosition.add(new BABYLON.Vector3(0, 0.16, 0)));
+      if (!corner2HasPlant) surfaceSpawnLocations.push(corner2.absolutePosition.add(new BABYLON.Vector3(0, 0.16, 0)));
+
+      // Floor is a real solid surface, so this location is safe and never floats.
+      surfaceSpawnLocations.push(new BABYLON.Vector3(
+        (Math.random() - 0.5) * (roomWidth - 4),
+        0.13,
+        (Math.random() - 0.5) * (roomLength - 4)
+      ));
 
       // Non-clipping furniture layouts
       if (roomType === 0 || roomType === 2) {
         const wTable1 = buildWallTable(roomGroup, new BABYLON.Vector3(-roomWidth / 2 + 1.1, 0, -2.5), Math.PI / 2);
-        surfaceSpawnLocations.push(wTable1.absolutePosition.add(new BABYLON.Vector3(0, 0.12, 0)));
+        surfaceSpawnLocations.push(wTable1.absolutePosition.add(new BABYLON.Vector3(0, 0.16, 0)));
       }
 
       if (roomType === 1 || roomType === 3) {
-        buildMetalLocker(roomGroup, new BABYLON.Vector3(roomWidth / 2 - 0.9, 0, -2.5), -Math.PI / 2);
+        buildMetalLocker(roomGroup, new BABYLON.Vector3(roomWidth / 2 - 1.3, 0, -2.5), -Math.PI / 2);
       }
 
       if (roomType === 2 || roomType === 3) {
         const rackShelves = buildWarehouseRack(roomGroup, new BABYLON.Vector3(-roomWidth / 2 + 1.1, 0, 3.0), Math.PI / 2);
         rackShelves.forEach(sh => {
-          surfaceSpawnLocations.push(sh.absolutePosition.add(new BABYLON.Vector3(0, 0.12, 0)));
+          surfaceSpawnLocations.push(sh.absolutePosition.add(new BABYLON.Vector3(0, 0.16, 0)));
         });
       }
 
-      if (Math.random() < 0.15 && surfaceSpawnLocations.length > 0) {
+      if (Math.random() < 0.20 && surfaceSpawnLocations.length > 0) {
         const chosenLoc = surfaceSpawnLocations[Math.floor(Math.random() * surfaceSpawnLocations.length)];
         buildBatteryPickup(roomGroup, chosenLoc);
       }
 
-      const darknessFactor = Math.max(0.08, 0.65 - Math.floor(roomIndex / 8) * 0.1);
+      const darknessFactor = Math.max(0.065, 0.36 - roomIndex * 0.018);
       const roomLight = new BABYLON.PointLight("rLight_" + roomIndex, new BABYLON.Vector3(0, roomHeight - 1, 0), scene);
       roomLight.intensity = darknessFactor;
+      roomLight.range = 18;
+      roomLight.diffuse = new BABYLON.Color3(0.78,0.79,0.76);
+      roomLight.specular = new BABYLON.Color3(0.12,0.12,0.12);
       roomLight.parent = roomGroup;
 
       activeRooms.push(roomGroup);
@@ -1513,10 +2405,10 @@
       playerNode.rotation.y = camera.rotation.y;
 
       // Lay legs flat on sofa & point arms straight out (Roblox Seat Pose)
-      lLegMesh.rotation.x = -Math.PI / 2;
-      rLegMesh.rotation.x = -Math.PI / 2;
-      lArmMesh.rotation.x = -Math.PI / 2;
-      rArmMesh.rotation.x = -Math.PI / 2;
+      lLegPivot.rotation.x = -Math.PI / 2;
+      rLegPivot.rotation.x = -Math.PI / 2;
+      lArmPivot.rotation.x = -Math.PI / 2;
+      rArmPivot.rotation.x = -Math.PI / 2;
 
       document.getElementById('jumpBtn').style.display = 'flex';
     }
@@ -1526,10 +2418,10 @@
       playerState.isSitting = false;
 
       // Restore limbs back to normal standing orientation
-      lLegMesh.rotation.x = 0;
-      rLegMesh.rotation.x = 0;
-      lArmMesh.rotation.x = 0;
-      rArmMesh.rotation.x = 0;
+      lLegPivot.rotation.x = 0;
+      rLegPivot.rotation.x = 0;
+      lArmPivot.rotation.x = 0;
+      rArmPivot.rotation.x = 0;
 
       const yaw = camera.rotation.y;
       const forwardDir = new BABYLON.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
@@ -1593,19 +2485,13 @@
 
         if (playerState.holdingFlashlight) {
           slot.classList.add('active');
-          flashlightMesh.setEnabled(true);
+          headlampBand.setEnabled(false); headlampHousing.setEnabled(false); headlampLens.setEnabled(false); flashlightMesh.setEnabled(false);
           batWidget.classList.remove('hidden');
-          
-          if (playerState.batteryLevel > 0) {
-            playerState.flashlightOn = true;
-            flashlightSpot.intensity = 2.4;
-          }
+          if (playerState.batteryLevel > 0) { playerState.flashlightOn = true; flashlightSpot.intensity = 3.1; flashlightPoint.intensity = 0.55; }
         } else {
           slot.classList.remove('active');
-          flashlightMesh.setEnabled(false);
-          batWidget.classList.add('hidden');
-          playerState.flashlightOn = false;
-          flashlightSpot.intensity = 0;
+          headlampBand.setEnabled(false); headlampHousing.setEnabled(false); headlampLens.setEnabled(false); flashlightMesh.setEnabled(false);
+          batWidget.classList.add('hidden'); playerState.flashlightOn = false; flashlightSpot.intensity = 0; flashlightPoint.intensity = 0;
         }
         updateBatteryUI();
       });
@@ -1709,11 +2595,12 @@
     function toggleFlashlight() {
       if (playerState.batteryLevel <= 0) {
         playerState.flashlightOn = false;
-        flashlightSpot.intensity = 0;
+        flashlightSpot.intensity = 0; flashlightPoint.intensity = 0;
         return;
       }
       playerState.flashlightOn = !playerState.flashlightOn;
-      flashlightSpot.intensity = playerState.flashlightOn ? 2.4 : 0;
+      flashlightSpot.intensity = playerState.flashlightOn ? 3.1 : 0;
+      flashlightPoint.intensity = playerState.flashlightOn ? 0.55 : 0;
     }
 
     function updateBatteryUI() {
@@ -1742,17 +2629,18 @@
 
           let flickers = 0;
           const flickerInt = setInterval(() => {
-            flashlightSpot.intensity = (flickers % 2 === 0) ? 1.5 : 0;
+            flashlightSpot.intensity = (flickers % 2 === 0) ? 1.8 : 0;
+            flashlightPoint.intensity = (flickers % 2 === 0) ? 0.28 : 0;
             flickers++;
             if (flickers > 5) {
               clearInterval(flickerInt);
-              flashlightSpot.intensity = 0;
+              flashlightSpot.intensity = 0; flashlightPoint.intensity = 0;
 
               if (playerState.batteriesCount > 0) {
                 playerState.batteriesCount--;
                 playerState.batteryLevel = 3.0;
                 playerState.flashlightOn = true;
-                flashlightSpot.intensity = 2.4;
+                flashlightSpot.intensity = 3.1; flashlightPoint.intensity = 0.55;
               }
               updateBatteryUI();
             }
@@ -1796,23 +2684,33 @@
           camera.cameraDirection.x = moveVectorX;
           camera.cameraDirection.z = moveVectorZ;
 
-          // Roblox Walking limb swing animation
+          // Roblox Walking limb swing animation — pivots are anchored at the
+          // shoulders/hips, so this swings the limbs from the joint instead
+          // of sliding the whole mesh away from the torso.
           walkAnimTime += dt * 9.5;
           const swing = Math.sin(walkAnimTime) * 0.55;
-          lArmMesh.rotation.x = swing;
-          rArmMesh.rotation.x = -swing;
-          lLegMesh.rotation.x = -swing;
-          rLegMesh.rotation.x = swing;
+          lArmPivot.rotation.x = swing;
+          rArmPivot.rotation.x = -swing;
+          lLegPivot.rotation.x = -swing;
+          rLegPivot.rotation.x = swing;
         } else {
           camera.cameraDirection.x = 0;
           camera.cameraDirection.z = 0;
 
           // Smoothly reset limbs back to 0 when idle
-          lArmMesh.rotation.x *= 0.8;
-          rArmMesh.rotation.x *= 0.8;
-          lLegMesh.rotation.x *= 0.8;
-          rLegMesh.rotation.x *= 0.8;
+          lArmPivot.rotation.x *= 0.8;
+          rArmPivot.rotation.x *= 0.8;
+          lLegPivot.rotation.x *= 0.8;
+          rLegPivot.rotation.x *= 0.8;
         }
+
+        // Natural headlamp bob: both the directional beam and point-light spill subtly move with footsteps.
+        const movingNow = (inputX !== 0 || inputZ !== 0);
+        flashlightBobTime += dt * (movingNow ? 10.5 : 2.0);
+        const bobY = Math.sin(flashlightBobTime) * (movingNow ? 0.075 : 0.010);
+        const bobX = movingNow ? Math.sin(flashlightBobTime * 0.5) * 0.026 : 0;
+        flashlightSpot.position.x = bobX; flashlightSpot.position.y = 0.68 + bobY;
+        flashlightPoint.position.x = bobX * 0.65; flashlightPoint.position.y = 0.75 + bobY * 0.92;
 
         playerNode.position.x = camera.position.x;
         playerNode.position.z = camera.position.z;
@@ -1820,6 +2718,7 @@
       }
 
       processBatteryDrain(dt);
+      updateRadioAudio();
       checkInteractables();
     }
 
@@ -1872,6 +2771,7 @@
     document.getElementById('playBtn').addEventListener('click', () => {
       document.getElementById('mainMenu').classList.add('hidden');
       document.getElementById('hud').classList.remove('hidden');
+      ensureAudioContext();
       initGame();
     });
 
@@ -1898,3 +2798,4 @@
   </script>
 </body>
 </html>
+
