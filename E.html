@@ -1,0 +1,1900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Rooms: Reborn</title>
+  
+  <script src="https://cdn.babylonjs.com/babylon.js"></script>
+  
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #000;
+      color: #fff;
+    }
+
+    #renderCanvas {
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+      display: block;
+    }
+
+    .overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 20;
+      background: rgba(10, 12, 16, 0.92);
+      backdrop-filter: blur(12px);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .menu-title {
+      font-size: 3.5rem;
+      font-weight: 900;
+      letter-spacing: 6px;
+      color: #f39c12;
+      text-shadow: 0 0 30px rgba(243, 156, 18, 0.6), 2px 2px 5px #000;
+      margin-bottom: 2rem;
+      text-transform: uppercase;
+      text-align: center;
+    }
+
+    .menu-btn {
+      width: 250px;
+      padding: 15px 30px;
+      margin: 10px;
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #ffffff;
+      background: linear-gradient(135deg, #2c3e50, #34495e);
+      border: 2px solid #f39c12;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    }
+
+    .menu-btn:hover, .menu-btn:active {
+      background: linear-gradient(135deg, #f39c12, #e67e22);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(243, 156, 18, 0.5);
+    }
+
+    .avatar-card {
+      background: rgba(20, 25, 35, 0.95);
+      border: 2px solid #f39c12;
+      border-radius: 12px;
+      padding: 26px;
+      width: 90%;
+      max-width: 450px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.9);
+    }
+
+    .avatar-card h2 {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #f39c12;
+      letter-spacing: 1px;
+    }
+
+    .color-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .color-item {
+      display: flex;
+      flex-direction: column;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #ccc;
+    }
+
+    .color-item label {
+      margin-bottom: 4px;
+    }
+
+    .color-item input[type="color"] {
+      width: 100%;
+      height: 40px;
+      border: 1px solid #555;
+      border-radius: 6px;
+      cursor: pointer;
+      background: none;
+    }
+
+    #hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    #crosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 6px;
+      height: 6px;
+      background-color: rgba(255, 255, 255, 0.85);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 4px rgba(0,0,0,0.9);
+    }
+
+    #interactionPrompt {
+      position: absolute;
+      bottom: 35px;
+      right: 35px;
+      width: 72px;
+      height: 72px;
+      background: #f39c12;
+      border: 3px solid #ffffff;
+      border-radius: 50%;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      pointer-events: auto;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+      z-index: 15;
+    }
+
+    #interactionPrompt svg {
+      width: 38px;
+      height: 38px;
+    }
+
+    #batteryWidget {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(15, 15, 20, 0.85);
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+    }
+
+    .battery-shell {
+      width: 50px;
+      height: 24px;
+      border: 2px solid #fff;
+      border-radius: 4px;
+      padding: 2px;
+      position: relative;
+      display: flex;
+      gap: 2px;
+    }
+
+    .battery-shell::after {
+      content: '';
+      position: absolute;
+      right: -6px;
+      top: 6px;
+      width: 3px;
+      height: 8px;
+      background-color: #fff;
+      border-radius: 0 2px 2px 0;
+    }
+
+    .battery-bar {
+      flex: 1;
+      height: 100%;
+      background-color: #2ecc71;
+      border-radius: 1px;
+      transition: background-color 0.2s;
+    }
+
+    .battery-bar.empty {
+      background-color: transparent !important;
+    }
+
+    .battery-count {
+      font-weight: 800;
+      font-size: 1.1rem;
+      color: #f39c12;
+    }
+
+    #hotbar {
+      position: absolute;
+      bottom: 25px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 12px;
+      pointer-events: auto;
+    }
+
+    .hotbar-slot {
+      width: 76px;
+      height: 76px;
+      background: rgba(25, 28, 35, 0.85);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #fff;
+      cursor: pointer;
+      backdrop-filter: blur(6px);
+      transition: all 0.2s;
+    }
+
+    .hotbar-slot.active {
+      border-color: #f39c12;
+      background: rgba(243, 156, 18, 0.35);
+      box-shadow: 0 0 15px rgba(243, 156, 18, 0.6);
+    }
+
+    .hotbar-slot svg {
+      width: 28px;
+      height: 28px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      margin-bottom: 4px;
+    }
+
+    #mobileControls {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      display: none;
+    }
+
+    #joystickContainer {
+      position: absolute;
+      bottom: 35px;
+      left: 35px;
+      width: 125px;
+      height: 125px;
+      background: rgba(30, 30, 35, 0.55);
+      border: 3px solid rgba(80, 80, 90, 0.6);
+      border-radius: 50%;
+      pointer-events: auto;
+      touch-action: none;
+    }
+
+    #joystickKnob {
+      position: absolute;
+      top: 37px;
+      left: 37px;
+      width: 50px;
+      height: 50px;
+      background: #e08b18;
+      border-radius: 50%;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.6);
+    }
+
+    #touchCameraZone {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 65%;
+      height: 100%;
+      pointer-events: auto;
+      touch-action: none;
+    }
+
+    #jumpBtn {
+      position: absolute;
+      bottom: 120px;
+      right: 35px;
+      width: 72px;
+      height: 72px;
+      background: #f39c12;
+      border: 3px solid #fff;
+      border-radius: 50%;
+      pointer-events: auto;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+      cursor: pointer;
+      z-index: 15;
+    }
+
+    #jumpBtn svg {
+      width: 38px;
+      height: 38px;
+    }
+  </style>
+</head>
+<body>
+
+  <canvas id="renderCanvas"></canvas>
+
+  <div id="mainMenu" class="overlay">
+    <h1 class="menu-title">Rooms: Reborn</h1>
+    <button id="playBtn" class="menu-btn">PLAY</button>
+    <button id="avatarBtn" class="menu-btn">AVATAR</button>
+  </div>
+
+  <div id="avatarMenu" class="overlay hidden">
+    <div class="avatar-card">
+      <h2>Customise Player (R6)</h2>
+      <div class="color-grid">
+        <div class="color-item">
+          <label>Head</label>
+          <input type="color" id="colHead" value="#f3c794">
+        </div>
+        <div class="color-item">
+          <label>Torso</label>
+          <input type="color" id="colTorso" value="#00a2ff">
+        </div>
+        <div class="color-item">
+          <label>Left Arm</label>
+          <input type="color" id="colLArm" value="#f3c794">
+        </div>
+        <div class="color-item">
+          <label>Right Arm</label>
+          <input type="color" id="colRArm" value="#f3c794">
+        </div>
+        <div class="color-item">
+          <label>Left Leg</label>
+          <input type="color" id="colLLeg" value="#1b2a4a">
+        </div>
+        <div class="color-item">
+          <label>Right Leg</label>
+          <input type="color" id="colRLeg" value="#1b2a4a">
+        </div>
+      </div>
+      <button id="saveAvatarBtn" class="menu-btn" style="width:100%; margin:0;">SAVE & BACK</button>
+    </div>
+  </div>
+
+  <div id="hud" class="hidden">
+    <div id="crosshair"></div>
+    <div id="interactionPrompt"></div>
+
+    <div id="batteryWidget" class="hidden">
+      <div class="battery-shell">
+        <div id="bBar1" class="battery-bar"></div>
+        <div id="bBar2" class="battery-bar"></div>
+        <div id="bBar3" class="battery-bar"></div>
+      </div>
+      <div id="batteryCount" class="battery-count">x0</div>
+    </div>
+
+    <div id="hotbar">
+      <div id="slotFlashlight" class="hotbar-slot">
+        <svg viewBox="0 0 24 24">
+          <path d="M18 6L6 6M16 6L14 10L14 20L10 20L10 10L8 6"></path>
+        </svg>
+        <span>Flashlight</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="mobileControls">
+    <div id="joystickContainer">
+      <div id="joystickKnob"></div>
+    </div>
+    <div id="touchCameraZone"></div>
+  </div>
+
+  <div id="jumpBtn">
+    <svg viewBox="0 0 24 24">
+      <path d="M12 4L4 14H9V20H15V14H20L12 4Z" fill="black"/>
+    </svg>
+  </div>
+
+  <script>
+    // --- PROCEDURAL TEXTURES ---
+    function makeTextureCanvas(w, h, drawFn) {
+      const cvs = document.createElement('canvas');
+      cvs.width = w;
+      cvs.height = h;
+      const ctx = cvs.getContext('2d');
+      drawFn(ctx, w, h);
+      return cvs.toDataURL();
+    }
+
+    const texRedCarpet = makeTextureCanvas(512, 512, (ctx, w, h) => {
+      ctx.fillStyle = '#611212';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#470b0b';
+      for (let y = 0; y < h; y += 16) ctx.fillRect(0, y, w, 6);
+      ctx.fillStyle = '#f39c12';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(16, 16, w - 32, h - 32);
+      ctx.fillStyle = '#3a0808';
+      for (let i = 0; i < 12000; i++) ctx.fillRect(Math.random() * w, Math.random() * h, 2, 2);
+    });
+
+    const texWoodWall = makeTextureCanvas(512, 512, (ctx, w, h) => {
+      ctx.fillStyle = '#c7cacd';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#aaad2d';
+      for (let x = 0; x < w; x += 32) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
+        ctx.fillRect(x, 0, 3, h);
+      }
+      ctx.fillStyle = 'rgba(0,0,0,0.04)';
+      for (let i = 0; i < 4000; i++) ctx.fillRect(Math.random() * w, Math.random() * h, 1, 12);
+    });
+
+    const texGreyWood = makeTextureCanvas(512, 512, (ctx, w, h) => {
+      ctx.fillStyle = '#6c7075';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#525559';
+      for (let x = 0; x < w; x += 32) ctx.fillRect(x, 0, 3, h);
+      ctx.fillStyle = 'rgba(0,0,0,0.08)';
+      for (let i = 0; i < 4000; i++) ctx.fillRect(Math.random() * w, Math.random() * h, 1.5, 14);
+    });
+
+    const texDoorWood = makeTextureCanvas(512, 512, (ctx, w, h) => {
+      ctx.fillStyle = '#3d2010';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#261208';
+      for (let x = 0; x < w; x += 32) ctx.fillRect(x, 0, 3, h);
+      ctx.fillStyle = 'rgba(0,0,0,0.15)';
+      for (let i = 0; i < 3000; i++) ctx.fillRect(Math.random() * w, Math.random() * h, 1.5, 18);
+    });
+
+    const texFrameWood = makeTextureCanvas(256, 256, (ctx, w, h) => {
+      ctx.fillStyle = '#221107';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#110803';
+      for (let x = 0; x < w; x += 16) ctx.fillRect(x, 0, 2, h);
+    });
+
+    const texTableWood = makeTextureCanvas(512, 512, (ctx, w, h) => {
+      ctx.fillStyle = '#5c3317';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#3d200d';
+      for (let y = 0; y < h; y += 12) ctx.fillRect(0, y, w, 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.08)';
+      for (let i = 0; i < 5000; i++) ctx.fillRect(Math.random()*w, Math.random()*h, 10, 1.5);
+    });
+
+    const texSofaFabric = makeTextureCanvas(256, 256, (ctx, w, h) => {
+      ctx.fillStyle = '#181d28';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#0f121a';
+      for (let i = 0; i < 4000; i++) ctx.fillRect(Math.random() * w, Math.random() * h, 2, 2);
+    });
+
+    const texPlantLeaf = makeTextureCanvas(256, 256, (ctx, w, h) => {
+      ctx.fillStyle = '#2e7d32';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#1b5e20';
+      for (let i = 0; i < 2000; i++) ctx.fillRect(Math.random()*w, Math.random()*h, 3, 3);
+    });
+
+    const texCeramicPot = makeTextureCanvas(256, 256, (ctx, w, h) => {
+      ctx.fillStyle = '#a0522d';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#8b4513';
+      for (let y = 0; y < h; y += 16) ctx.fillRect(0, y, w, 3);
+    });
+
+    const texCardboard = makeTextureCanvas(256, 256, (ctx, w, h) => {
+      ctx.fillStyle = '#b8860b';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#996515';
+      for (let i = 0; i < 3000; i++) ctx.fillRect(Math.random() * w, Math.random() * h, 2, 1);
+      ctx.strokeStyle = '#5c3d11';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(8, 8, w - 16, h - 16);
+    });
+
+    const texSkyDay = makeTextureCanvas(512, 512, (ctx, w, h) => {
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, '#2b7cd3');
+      grad.addColorStop(0.5, '#68b1f4');
+      grad.addColorStop(1, '#c8e2f8');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+      ctx.beginPath();
+      ctx.arc(140, 180, 80, 0, Math.PI * 2);
+      ctx.arc(220, 160, 100, 0, Math.PI * 2);
+      ctx.arc(300, 190, 70, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // ENGINE SETUP
+    const canvas = document.getElementById('renderCanvas');
+    const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
+
+    let scene, camera;
+    const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
+    const playerState = {
+      colors: {
+        head: '#f3c794',
+        torso: '#00a2ff',
+        lArm: '#f3c794',
+        rArm: '#f3c794',
+        lLeg: '#1b2a4a',
+        rLeg: '#1b2a4a'
+      },
+      isSitting: false,
+      holdingFlashlight: false,
+      flashlightOn: false,
+      batteryLevel: 3.0,
+      batteriesCount: 0,
+      currentRoomIndex: 0,
+      lastRoomZ: 0
+    };
+
+    let playerNode, headMesh, lArmMesh, rArmMesh, lLegMesh, rLegMesh;
+    let walkAnimTime = 0;
+    let avatarMaterials = {};
+    let materials = {};
+    let activeRooms = [];
+    let interactables = [];
+    let currentPromptTarget = null;
+
+    let moveInput = { x: 0, z: 0 };
+    let keysPressed = {};
+
+    function initGame() {
+      scene = new BABYLON.Scene(engine);
+      scene.clearColor = new BABYLON.Color4(0.45, 0.72, 0.95, 1.0);
+
+      scene.collisionsEnabled = true;
+      scene.gravity = new BABYLON.Vector3(0, -0.25, 0);
+
+      const ambientLight = new BABYLON.HemisphericLight("ambientLight", new BABYLON.Vector3(0, 1, 0), scene);
+      ambientLight.intensity = 0.75;
+
+      // MATERIALS (Non-reflective wood/walls/doors)
+      materials.carpet = new BABYLON.StandardMaterial("mCarpet", scene);
+      materials.carpet.diffuseTexture = new BABYLON.Texture(texRedCarpet, scene);
+      materials.carpet.diffuseTexture.uScale = 6;
+      materials.carpet.diffuseTexture.vScale = 6;
+
+      materials.wallWood = new BABYLON.StandardMaterial("mWallWood", scene);
+      materials.wallWood.diffuseTexture = new BABYLON.Texture(texWoodWall, scene);
+      materials.wallWood.specularColor = new BABYLON.Color3(0, 0, 0);
+
+      materials.ceilingWood = new BABYLON.StandardMaterial("mCeilingWood", scene);
+      materials.ceilingWood.diffuseTexture = new BABYLON.Texture(texGreyWood, scene);
+      materials.ceilingWood.specularColor = new BABYLON.Color3(0, 0, 0);
+
+      materials.doorWood = new BABYLON.StandardMaterial("mDoorWood", scene);
+      materials.doorWood.diffuseTexture = new BABYLON.Texture(texDoorWood, scene);
+      materials.doorWood.specularColor = new BABYLON.Color3(0, 0, 0);
+
+      materials.frameWood = new BABYLON.StandardMaterial("mFrameWood", scene);
+      materials.frameWood.diffuseTexture = new BABYLON.Texture(texFrameWood, scene);
+      materials.frameWood.specularColor = new BABYLON.Color3(0, 0, 0);
+
+      materials.tableWood = new BABYLON.StandardMaterial("mTableWood", scene);
+      materials.tableWood.diffuseTexture = new BABYLON.Texture(texTableWood, scene);
+
+      materials.sofa = new BABYLON.StandardMaterial("mSofa", scene);
+      materials.sofa.diffuseTexture = new BABYLON.Texture(texSofaFabric, scene);
+
+      materials.leaf = new BABYLON.StandardMaterial("mLeaf", scene);
+      materials.leaf.diffuseTexture = new BABYLON.Texture(texPlantLeaf, scene);
+
+      materials.pot = new BABYLON.StandardMaterial("mPot", scene);
+      materials.pot.diffuseTexture = new BABYLON.Texture(texCeramicPot, scene);
+
+      materials.cardboard = new BABYLON.StandardMaterial("mCardboard", scene);
+      materials.cardboard.diffuseTexture = new BABYLON.Texture(texCardboard, scene);
+
+      materials.plasticYellow = new BABYLON.StandardMaterial("mPlasticYellow", scene);
+      materials.plasticYellow.diffuseColor = new BABYLON.Color3(0.95, 0.75, 0.1);
+      materials.plasticYellow.specularColor = new BABYLON.Color3(0, 0, 0);
+
+      materials.duracellCopper = new BABYLON.StandardMaterial("mDuraCop", scene);
+      materials.duracellCopper.diffuseColor = new BABYLON.Color3(0.85, 0.45, 0.12);
+      materials.duracellCopper.specularColor = new BABYLON.Color3(0.6, 0.6, 0.6);
+
+      materials.duracellBlack = new BABYLON.StandardMaterial("mDuraBlack", scene);
+      materials.duracellBlack.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.12);
+
+      materials.duracellSilver = new BABYLON.StandardMaterial("mDuraSilver", scene);
+      materials.duracellSilver.diffuseColor = new BABYLON.Color3(0.8, 0.8, 0.85);
+
+      materials.glass = new BABYLON.StandardMaterial("mGlass", scene);
+      materials.glass.diffuseColor = new BABYLON.Color3(0.7, 0.9, 1.0);
+      materials.glass.alpha = 0.45;
+
+      materials.sky = new BABYLON.StandardMaterial("mSky", scene);
+      materials.sky.diffuseTexture = new BABYLON.Texture(texSkyDay, scene);
+      materials.sky.emissiveTexture = materials.sky.diffuseTexture;
+      materials.sky.disableLighting = true;
+
+      materials.metalLocker = new BABYLON.StandardMaterial("mLocker", scene);
+      materials.metalLocker.diffuseColor = new BABYLON.Color3(0.35, 0.38, 0.42);
+
+      materials.metalRack = new BABYLON.StandardMaterial("mRack", scene);
+      materials.metalRack.diffuseColor = new BABYLON.Color3(0.2, 0.22, 0.25);
+      materials.metalRack.specularColor = new BABYLON.Color3(0.4, 0.4, 0.4);
+
+      materials.metalDark = new BABYLON.StandardMaterial("mMetalDark", scene);
+      materials.metalDark.diffuseColor = new BABYLON.Color3(0.15, 0.15, 0.18);
+
+      materials.elevatorDoor = new BABYLON.StandardMaterial("mElevatorDoor", scene);
+      materials.elevatorDoor.diffuseColor = new BABYLON.Color3(0.22, 0.24, 0.28);
+
+      materials.blackGrid = new BABYLON.StandardMaterial("mBlackGrid", scene);
+      materials.blackGrid.diffuseColor = new BABYLON.Color3(0.08, 0.08, 0.08);
+      materials.blackGrid.specularColor = new BABYLON.Color3(0, 0, 0);
+
+      // PLAYER CAMERA
+      camera = new BABYLON.UniversalCamera("PlayerCamera", new BABYLON.Vector3(0, 2.2, -2), scene);
+      camera.minZ = 0.1;
+      camera.fov = 1.15;
+      camera.inertia = 0.0;
+      camera.ellipsoid = new BABYLON.Vector3(0.7, 1.1, 0.7);
+      camera.checkCollisions = true;
+      camera.applyGravity = true;
+
+      createPlayerBody();
+      setupFlashlight();
+      buildSpawnRoom();
+      setupControls();
+
+      engine.runRenderLoop(() => {
+        if (scene) {
+          gameUpdateLoop();
+          scene.render();
+        }
+      });
+    }
+
+    // PLAYER AVATAR (Seamless Torso/Arms Connection)
+    function createPlayerBody() {
+      playerNode = new BABYLON.TransformNode("playerNode", scene);
+
+      avatarMaterials.head = new BABYLON.StandardMaterial("mHead", scene);
+      avatarMaterials.torso = new BABYLON.StandardMaterial("mTorso", scene);
+      avatarMaterials.lArm = new BABYLON.StandardMaterial("mLArm", scene);
+      avatarMaterials.rArm = new BABYLON.StandardMaterial("mRArm", scene);
+      avatarMaterials.lLeg = new BABYLON.StandardMaterial("mLLeg", scene);
+      avatarMaterials.rLeg = new BABYLON.StandardMaterial("mRLeg", scene);
+
+      applyAvatarColors();
+
+      headMesh = BABYLON.MeshBuilder.CreateBox("head", { size: 0.8 }, scene);
+      headMesh.position.y = 1.8;
+      headMesh.material = avatarMaterials.head;
+      headMesh.parent = playerNode;
+      headMesh.isVisible = false;
+
+      const torso = BABYLON.MeshBuilder.CreateBox("torso", { width: 1.0, height: 1.0, depth: 0.5 }, scene);
+      torso.position.y = 0.9;
+      torso.material = avatarMaterials.torso;
+      torso.parent = playerNode;
+
+      lArmMesh = BABYLON.MeshBuilder.CreateBox("lArm", { width: 0.45, height: 1.0, depth: 0.45 }, scene);
+      lArmMesh.position = new BABYLON.Vector3(-0.725, 0.9, 0);
+      lArmMesh.material = avatarMaterials.lArm;
+      lArmMesh.parent = playerNode;
+
+      rArmMesh = BABYLON.MeshBuilder.CreateBox("rArm", { width: 0.45, height: 1.0, depth: 0.45 }, scene);
+      rArmMesh.position = new BABYLON.Vector3(0.725, 0.9, 0);
+      rArmMesh.material = avatarMaterials.rArm;
+      rArmMesh.parent = playerNode;
+
+      lLegMesh = BABYLON.MeshBuilder.CreateBox("lLeg", { width: 0.45, height: 1.0, depth: 0.45 }, scene);
+      lLegMesh.position = new BABYLON.Vector3(-0.25, -0.1, 0);
+      lLegMesh.material = avatarMaterials.lLeg;
+      lLegMesh.parent = playerNode;
+
+      rLegMesh = BABYLON.MeshBuilder.CreateBox("rLeg", { width: 0.45, height: 1.0, depth: 0.45 }, scene);
+      rLegMesh.position = new BABYLON.Vector3(0.25, -0.1, 0);
+      rLegMesh.material = avatarMaterials.rLeg;
+      rLegMesh.parent = playerNode;
+    }
+
+    function applyAvatarColors() {
+      avatarMaterials.head.diffuseColor = BABYLON.Color3.FromHexString(playerState.colors.head);
+      avatarMaterials.torso.diffuseColor = BABYLON.Color3.FromHexString(playerState.colors.torso);
+      avatarMaterials.lArm.diffuseColor = BABYLON.Color3.FromHexString(playerState.colors.lArm);
+      avatarMaterials.rArm.diffuseColor = BABYLON.Color3.FromHexString(playerState.colors.rArm);
+      avatarMaterials.lLeg.diffuseColor = BABYLON.Color3.FromHexString(playerState.colors.lLeg);
+      avatarMaterials.rLeg.diffuseColor = BABYLON.Color3.FromHexString(playerState.colors.rLeg);
+    }
+
+    // ALWAYS-CENTERED FLASHLIGHT
+    let flashlightSpot, flashlightMesh;
+
+    function setupFlashlight() {
+      flashlightSpot = new BABYLON.SpotLight("flSpot", new BABYLON.Vector3(0, 0, 0), new BABYLON.Vector3(0, 0, 1), Math.PI / 3.2, 12, scene);
+      flashlightSpot.intensity = 0;
+      flashlightSpot.diffuse = new BABYLON.Color3(1, 0.95, 0.82);
+      flashlightSpot.parent = camera;
+
+      flashlightMesh = BABYLON.MeshBuilder.CreateCylinder("flMesh", { diameter: 0.1, height: 0.45 }, scene);
+      flashlightMesh.rotation.x = Math.PI / 2;
+      flashlightMesh.material = materials.duracellBlack;
+      flashlightMesh.parent = camera;
+      flashlightMesh.position = new BABYLON.Vector3(0.3, -0.25, 0.45);
+      flashlightMesh.setEnabled(false);
+    }
+
+    // DOOR FRAME
+    function createWoodenDoorFrame(parent, localPos) {
+      const frameNode = new BABYLON.TransformNode("doorFrame", scene);
+      frameNode.position = localPos;
+      frameNode.parent = parent;
+
+      const leftPillar = BABYLON.MeshBuilder.CreateBox("fLeft", { width: 0.25, height: 4.2, depth: 0.35 }, scene);
+      leftPillar.position = new BABYLON.Vector3(-1.3, 2.1, 0);
+      leftPillar.material = materials.frameWood;
+      leftPillar.checkCollisions = true;
+      leftPillar.parent = frameNode;
+
+      const rightPillar = BABYLON.MeshBuilder.CreateBox("fRight", { width: 0.25, height: 4.2, depth: 0.35 }, scene);
+      rightPillar.position = new BABYLON.Vector3(1.3, 2.1, 0);
+      rightPillar.material = materials.frameWood;
+      rightPillar.checkCollisions = true;
+      rightPillar.parent = frameNode;
+
+      const topHeader = BABYLON.MeshBuilder.CreateBox("fTop", { width: 2.85, height: 0.25, depth: 0.35 }, scene);
+      topHeader.position = new BABYLON.Vector3(0, 4.1, 0);
+      topHeader.material = materials.frameWood;
+      topHeader.checkCollisions = true;
+      topHeader.parent = frameNode;
+    }
+
+    // SEALED ELEVATOR WITH CEILING CONNECTION & UPRIGHT SIGN
+    function buildBrokenElevator(parent, localPos) {
+      const elNode = new BABYLON.TransformNode("brokenElevator", scene);
+      elNode.position = localPos;
+      elNode.parent = parent;
+
+      const totalH = 6.5;
+
+      const leftPillar = BABYLON.MeshBuilder.CreateBox("elFLeft", { width: 0.3, height: totalH, depth: 0.4 }, scene);
+      leftPillar.position = new BABYLON.Vector3(-1.5, totalH / 2, 0);
+      leftPillar.material = materials.metalDark;
+      leftPillar.checkCollisions = true;
+      leftPillar.parent = elNode;
+
+      const rightPillar = BABYLON.MeshBuilder.CreateBox("elFRight", { width: 0.3, height: totalH, depth: 0.4 }, scene);
+      rightPillar.position = new BABYLON.Vector3(1.5, totalH / 2, 0);
+      rightPillar.material = materials.metalDark;
+      rightPillar.checkCollisions = true;
+      rightPillar.parent = elNode;
+
+      const topHeader = BABYLON.MeshBuilder.CreateBox("elFTop", { width: 3.3, height: 2.3, depth: 0.4 }, scene);
+      topHeader.position = new BABYLON.Vector3(0, totalH - 1.15, 0);
+      topHeader.material = materials.metalDark;
+      topHeader.checkCollisions = true;
+      topHeader.parent = elNode;
+
+      const solidBack = BABYLON.MeshBuilder.CreateBox("elBacking", { width: 3.0, height: totalH, depth: 0.1 }, scene);
+      solidBack.position = new BABYLON.Vector3(0, totalH / 2, -0.2);
+      solidBack.material = materials.metalDark;
+      solidBack.checkCollisions = true;
+      solidBack.parent = elNode;
+
+      const doorL = BABYLON.MeshBuilder.CreateBox("elDoorL", { width: 1.4, height: 4.2, depth: 0.1 }, scene);
+      doorL.position = new BABYLON.Vector3(-0.7, 2.1, -0.05);
+      doorL.material = materials.elevatorDoor;
+      doorL.checkCollisions = true;
+      doorL.parent = elNode;
+
+      const doorR = BABYLON.MeshBuilder.CreateBox("elDoorR", { width: 1.4, height: 4.2, depth: 0.1 }, scene);
+      doorR.position = new BABYLON.Vector3(0.7, 2.1, -0.05);
+      doorR.material = materials.elevatorDoor;
+      doorR.checkCollisions = true;
+      doorR.parent = elNode;
+
+      // Correctly Oriented Sign
+      const signMesh = BABYLON.MeshBuilder.CreateBox("elSign", { width: 2.2, height: 0.5, depth: 0.08 }, scene);
+      signMesh.position = new BABYLON.Vector3(0, 4.8, 0.1);
+      
+      const dynamicTex = new BABYLON.DynamicTexture("elSignTex", { width: 512, height: 128 }, scene);
+      dynamicTex.vScale = -1;
+      const ctx = dynamicTex.getContext();
+      ctx.fillStyle = "#111116";
+      ctx.fillRect(0, 0, 512, 128);
+      ctx.font = "bold 46px Arial";
+      ctx.fillStyle = "#ff2222";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("OUT OF ORDER", 256, 64);
+      dynamicTex.update();
+
+      const signMat = new BABYLON.StandardMaterial("elSignMat", scene);
+      signMat.diffuseTexture = dynamicTex;
+      signMat.emissiveTexture = dynamicTex;
+      signMat.specularColor = new BABYLON.Color3(0, 0, 0);
+      signMesh.material = signMat;
+      signMesh.parent = elNode;
+
+      const plank1 = BABYLON.MeshBuilder.CreateBox("elPlank1", { width: 3.2, height: 0.22, depth: 0.08 }, scene);
+      plank1.position = new BABYLON.Vector3(0, 1.5, 0.2);
+      plank1.rotation.z = 0.1;
+      plank1.material = materials.frameWood;
+      plank1.checkCollisions = true;
+      plank1.parent = elNode;
+
+      const plank2 = BABYLON.MeshBuilder.CreateBox("elPlank2", { width: 3.2, height: 0.22, depth: 0.08 }, scene);
+      plank2.position = new BABYLON.Vector3(0, 2.4, 0.2);
+      plank2.rotation.z = -0.08;
+      plank2.material = materials.frameWood;
+      plank2.checkCollisions = true;
+      plank2.parent = elNode;
+    }
+
+    // FURNITURE & DECORATIONS
+    function buildCornerTable(parent, localPos, withPlant = false) {
+      const tNode = new BABYLON.TransformNode("cornerTable", scene);
+      tNode.position = localPos;
+      tNode.parent = parent;
+
+      const top = BABYLON.MeshBuilder.CreateBox("tTop", { width: 1.6, height: 0.12, depth: 1.6 }, scene);
+      top.position.y = 1.2;
+      top.material = materials.tableWood;
+      top.checkCollisions = true;
+      top.parent = tNode;
+
+      const legPositions = [[-0.6, 0.6, -0.6], [0.6, 0.6, -0.6], [-0.6, 0.6, 0.6], [0.6, 0.6, 0.6]];
+      legPositions.forEach(p => {
+        const leg = BABYLON.MeshBuilder.CreateBox("tLeg", { width: 0.12, height: 1.2, depth: 0.12 }, scene);
+        leg.position = new BABYLON.Vector3(p[0], p[1], p[2]);
+        leg.material = materials.tableWood;
+        leg.checkCollisions = true;
+        leg.parent = tNode;
+      });
+
+      if (withPlant) {
+        buildPottedPlant(tNode, new BABYLON.Vector3(0, 1.26, 0));
+      }
+
+      return top;
+    }
+
+    function buildWallTable(parent, localPos, rotY = 0) {
+      const tNode = new BABYLON.TransformNode("wallTable", scene);
+      tNode.position = localPos;
+      tNode.rotation.y = rotY;
+      tNode.parent = parent;
+
+      const top = BABYLON.MeshBuilder.CreateBox("tTop", { width: 3.6, height: 0.15, depth: 1.6 }, scene);
+      top.position.y = 1.2;
+      top.material = materials.tableWood;
+      top.checkCollisions = true;
+      top.parent = tNode;
+
+      const legPositions = [[-1.6, 0.6, -0.6], [1.6, 0.6, -0.6], [-1.6, 0.6, 0.6], [1.6, 0.6, 0.6]];
+      legPositions.forEach(p => {
+        const leg = BABYLON.MeshBuilder.CreateBox("tLeg", { width: 0.14, height: 1.2, depth: 0.14 }, scene);
+        leg.position = new BABYLON.Vector3(p[0], p[1], p[2]);
+        leg.material = materials.tableWood;
+        leg.checkCollisions = true;
+        leg.parent = tNode;
+      });
+
+      return top;
+    }
+
+    function buildPottedPlant(parent, localPos) {
+      const pNode = new BABYLON.TransformNode("pottedPlant", scene);
+      pNode.position = localPos;
+      pNode.parent = parent;
+
+      const pot = BABYLON.MeshBuilder.CreateCylinder("pot", { diameterTop: 0.8, diameterBottom: 0.5, height: 0.9 }, scene);
+      pot.position.y = 0.45;
+      pot.material = materials.pot;
+      pot.checkCollisions = true;
+      pot.parent = pNode;
+
+      const plantLeaves = BABYLON.MeshBuilder.CreateSphere("leaves", { diameter: 1.3, segments: 6 }, scene);
+      plantLeaves.position.y = 1.2;
+      plantLeaves.material = materials.leaf;
+      plantLeaves.checkCollisions = true;
+      plantLeaves.parent = pNode;
+    }
+
+    // INDUSTRIAL SHELF RACK (NON-OVERLAPPING BOXES)
+    function buildWarehouseRack(parentRoom, localPos, rotY) {
+      const rackNode = new BABYLON.TransformNode("warehouseRack", scene);
+      rackNode.position = localPos;
+      rackNode.rotation.y = rotY;
+      rackNode.parent = parentRoom;
+
+      const rw = 3.6, rh = 3.2, rd = 1.2;
+
+      const p1 = BABYLON.MeshBuilder.CreateBox("rp1", { width: 0.12, height: rh, depth: 0.12 }, scene);
+      p1.position = new BABYLON.Vector3(-rw/2 + 0.1, rh/2, -rd/2 + 0.1);
+      p1.material = materials.metalRack;
+      p1.checkCollisions = true;
+      p1.parent = rackNode;
+
+      const p2 = BABYLON.MeshBuilder.CreateBox("rp2", { width: 0.12, height: rh, depth: 0.12 }, scene);
+      p2.position = new BABYLON.Vector3(rw/2 - 0.1, rh/2, -rd/2 + 0.1);
+      p2.material = materials.metalRack;
+      p2.checkCollisions = true;
+      p2.parent = rackNode;
+
+      const p3 = BABYLON.MeshBuilder.CreateBox("rp3", { width: 0.12, height: rh, depth: 0.12 }, scene);
+      p3.position = new BABYLON.Vector3(-rw/2 + 0.1, rh/2, rd/2 - 0.1);
+      p3.material = materials.metalRack;
+      p3.checkCollisions = true;
+      p3.parent = rackNode;
+
+      const p4 = BABYLON.MeshBuilder.CreateBox("rp4", { width: 0.12, height: rh, depth: 0.12 }, scene);
+      p4.position = new BABYLON.Vector3(rw/2 - 0.1, rh/2, rd/2 - 0.1);
+      p4.material = materials.metalRack;
+      p4.checkCollisions = true;
+      p4.parent = rackNode;
+
+      const shelfYPositions = [0.4, 1.5, 2.6];
+      const validBatterySurfaces = [];
+
+      shelfYPositions.forEach(sy => {
+        const shelf = BABYLON.MeshBuilder.CreateBox("rShelf", { width: rw, height: 0.08, depth: rd }, scene);
+        shelf.position = new BABYLON.Vector3(0, sy, 0);
+        shelf.material = materials.metalRack;
+        shelf.checkCollisions = true;
+        shelf.parent = rackNode;
+
+        if (sy < 2.0) {
+          validBatterySurfaces.push(shelf);
+        }
+
+        // Spawn boxes with strict non-clipping boundary logic
+        const numBoxes = Math.floor(Math.random() * 3);
+        const occupiedRanges = [];
+
+        for (let i = 0; i < numBoxes; i++) {
+          const bw = 0.5 + Math.random() * 0.5;
+          const bh = 0.4 + Math.random() * 0.4;
+          const bd = 0.5 + Math.random() * 0.4;
+
+          let candidateX = 0;
+          let validPos = false;
+          let attempts = 0;
+
+          while (attempts < 12 && !validPos) {
+            candidateX = -rw/2 + 0.6 + Math.random() * (rw - 1.2);
+            validPos = true;
+            for (let rng of occupiedRanges) {
+              if (Math.abs(candidateX - rng.x) < (rng.halfW + bw/2 + 0.12)) {
+                validPos = false;
+                break;
+              }
+            }
+            attempts++;
+          }
+
+          if (validPos) {
+            occupiedRanges.push({ x: candidateX, halfW: bw/2 });
+            const box = BABYLON.MeshBuilder.CreateBox("cBox", { width: bw, height: bh, depth: bd }, scene);
+            box.position = new BABYLON.Vector3(candidateX, sy + 0.04 + bh/2, (Math.random() - 0.5) * 0.2);
+            box.rotation.y = (Math.random() - 0.5) * 0.3;
+            box.material = materials.cardboard;
+            box.checkCollisions = true;
+            box.parent = rackNode;
+          }
+        }
+      });
+
+      return validBatterySurfaces;
+    }
+
+    // LOCKERS
+    function buildMetalLocker(parentRoom, localPos, rotY) {
+      const lockerGroup = new BABYLON.TransformNode("lockerGroup", scene);
+      lockerGroup.position = localPos;
+      lockerGroup.rotation.y = rotY;
+      lockerGroup.parent = parentRoom;
+
+      const lockerW = 1.4, lockerH = 2.4, lockerD = 1.2;
+
+      const basePedestal = BABYLON.MeshBuilder.CreateBox("lBase", { width: lockerW + 0.1, height: 0.3, depth: lockerD + 0.1 }, scene);
+      basePedestal.position = new BABYLON.Vector3(0, 0.15, 0);
+      basePedestal.material = materials.metalDark;
+      basePedestal.checkCollisions = true;
+      basePedestal.parent = lockerGroup;
+
+      const cabinetY = 0.3 + (lockerH - 0.3) / 2;
+
+      const backWall = BABYLON.MeshBuilder.CreateBox("lBack", { width: lockerW, height: lockerH - 0.3, depth: 0.08 }, scene);
+      backWall.position = new BABYLON.Vector3(0, cabinetY, -lockerD / 2 + 0.04);
+      backWall.material = materials.metalLocker;
+      backWall.checkCollisions = true;
+      backWall.parent = lockerGroup;
+
+      const leftWall = BABYLON.MeshBuilder.CreateBox("lLeft", { width: 0.08, height: lockerH - 0.3, depth: lockerD }, scene);
+      leftWall.position = new BABYLON.Vector3(-lockerW / 2 + 0.04, cabinetY, 0);
+      leftWall.material = materials.metalLocker;
+      leftWall.checkCollisions = true;
+      leftWall.parent = lockerGroup;
+
+      const rightWall = BABYLON.MeshBuilder.CreateBox("lRight", { width: 0.08, height: lockerH - 0.3, depth: lockerD }, scene);
+      rightWall.position = new BABYLON.Vector3(lockerW / 2 - 0.04, cabinetY, 0);
+      rightWall.material = materials.metalLocker;
+      rightWall.checkCollisions = true;
+      rightWall.parent = lockerGroup;
+
+      const topRoof = BABYLON.MeshBuilder.CreateBox("lTop", { width: lockerW, height: 0.08, depth: lockerD }, scene);
+      topRoof.position = new BABYLON.Vector3(0, lockerH - 0.04, 0);
+      topRoof.material = materials.metalLocker;
+      topRoof.checkCollisions = true;
+      topRoof.parent = lockerGroup;
+
+      const doorPivot = new BABYLON.TransformNode("lockerDoorPivot", scene);
+      doorPivot.position = new BABYLON.Vector3(-lockerW / 2 + 0.05, cabinetY, lockerD / 2 - 0.05);
+      doorPivot.parent = lockerGroup;
+
+      const doorFrameWidth = lockerW - 0.1;
+      const doorFrameHeight = lockerH - 0.35;
+
+      const doorLower = BABYLON.MeshBuilder.CreateBox("dLower", { width: doorFrameWidth, height: doorFrameHeight - 0.7, depth: 0.06 }, scene);
+      doorLower.position = new BABYLON.Vector3(doorFrameWidth / 2, -(0.7 / 2), 0);
+      doorLower.material = materials.metalLocker;
+      doorLower.checkCollisions = true;
+      doorLower.parent = doorPivot;
+
+      const doorTopBorder = BABYLON.MeshBuilder.CreateBox("dTopBorder", { width: doorFrameWidth, height: 0.15, depth: 0.06 }, scene);
+      doorTopBorder.position = new BABYLON.Vector3(doorFrameWidth / 2, doorFrameHeight / 2 - 0.075, 0);
+      doorTopBorder.material = materials.metalLocker;
+      doorTopBorder.checkCollisions = true;
+      doorTopBorder.parent = doorPivot;
+
+      const doorLeftBorder = BABYLON.MeshBuilder.CreateBox("dLBorder", { width: 0.2, height: 0.55, depth: 0.06 }, scene);
+      doorLeftBorder.position = new BABYLON.Vector3(0.1, doorFrameHeight / 2 - 0.425, 0);
+      doorLeftBorder.material = materials.metalLocker;
+      doorLeftBorder.checkCollisions = true;
+      doorLeftBorder.parent = doorPivot;
+
+      const doorRightBorder = BABYLON.MeshBuilder.CreateBox("dRBorder", { width: 0.2, height: 0.55, depth: 0.06 }, scene);
+      doorRightBorder.position = new BABYLON.Vector3(doorFrameWidth - 0.1, doorFrameHeight / 2 - 0.425, 0);
+      doorRightBorder.material = materials.metalLocker;
+      doorRightBorder.checkCollisions = true;
+      doorRightBorder.parent = doorPivot;
+
+      const ventSlatYPositions = [doorFrameHeight / 2 - 0.22, doorFrameHeight / 2 - 0.35, doorFrameHeight / 2 - 0.48];
+      ventSlatYPositions.forEach(sy => {
+        const slat = BABYLON.MeshBuilder.CreateBox("vSlat", { width: doorFrameWidth - 0.4, height: 0.05, depth: 0.05 }, scene);
+        slat.position = new BABYLON.Vector3(doorFrameWidth / 2, sy, 0);
+        slat.rotation.x = 0.3;
+        slat.material = materials.metalLocker;
+        slat.parent = doorPivot;
+      });
+
+      let isOpen = false;
+      let lockerEntry = null;
+
+      lockerEntry = {
+        mesh: doorLower,
+        type: 'locker',
+        distance: 3.2,
+        prompt: "Open Locker",
+        action: () => {
+          isOpen = !isOpen;
+          lockerEntry.prompt = isOpen ? "Close Locker" : "Open Locker";
+
+          const targetRot = isOpen ? -Math.PI / 2.1 : 0;
+          const startRot = doorPivot.rotation.y;
+
+          BABYLON.Animation.CreateAndStartAnimation(
+            "lockerDoorSwing", doorPivot, "rotation.y", 30, 15,
+            startRot, targetRot,
+            BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
+          );
+        }
+      };
+
+      interactables.push(lockerEntry);
+    }
+
+    // DURACELL BATTERY PICKUP
+    function buildBatteryPickup(parentRoom, localPos) {
+      const batGroup = new BABYLON.TransformNode("duracellBattery", scene);
+      batGroup.position = localPos;
+      batGroup.parent = parentRoom;
+
+      batGroup.rotation.z = Math.PI / 2;
+      batGroup.rotation.y = Math.random() * Math.PI * 2;
+
+      const batBody = BABYLON.MeshBuilder.CreateCylinder("bBody", { diameter: 0.22, height: 0.38 }, scene);
+      batBody.position.y = -0.05;
+      batBody.material = materials.duracellBlack;
+      batBody.parent = batGroup;
+
+      const batTop = BABYLON.MeshBuilder.CreateCylinder("bTop", { diameter: 0.22, height: 0.18 }, scene);
+      batTop.position.y = 0.18;
+      batTop.material = materials.duracellCopper;
+      batTop.parent = batGroup;
+
+      const batTip = BABYLON.MeshBuilder.CreateCylinder("bTip", { diameter: 0.08, height: 0.06 }, scene);
+      batTip.position.y = 0.28;
+      batTip.material = materials.duracellSilver;
+      batTip.parent = batGroup;
+
+      interactables.push({
+        mesh: batBody,
+        type: 'battery',
+        distance: 3.0,
+        prompt: "Pick up Duracell Battery",
+        action: () => {
+          playerState.batteriesCount++;
+          if (playerState.batteryLevel <= 0) {
+            playerState.batteryLevel = 3.0;
+            playerState.batteriesCount--;
+          }
+          updateBatteryUI();
+          batGroup.dispose();
+        }
+      });
+    }
+
+    // SPAWN ROOM WITH BLACK WOODEN GRID SKYLIGHT
+    function buildSpawnRoom() {
+      const roomGroup = new BABYLON.TransformNode("spawnRoom", scene);
+      const roomLength = 16, roomWidth = 12, roomHeight = 6.5;
+
+      playerState.lastRoomZ = 0;
+
+      const floor = BABYLON.MeshBuilder.CreatePlane("floor", { width: roomWidth, height: roomLength }, scene);
+      floor.rotation.x = Math.PI / 2;
+      floor.material = materials.carpet;
+      floor.checkCollisions = true;
+      floor.parent = roomGroup;
+
+      const bwL = BABYLON.MeshBuilder.CreateBox("bwL", { width: (roomWidth - 3.3) / 2, height: roomHeight, depth: 0.3 }, scene);
+      bwL.position = new BABYLON.Vector3(-(roomWidth - 3.3) / 4 - 1.65, roomHeight / 2, -roomLength / 2);
+      bwL.material = materials.wallWood;
+      bwL.checkCollisions = true;
+      bwL.parent = roomGroup;
+
+      const bwR = BABYLON.MeshBuilder.CreateBox("bwR", { width: (roomWidth - 3.3) / 2, height: roomHeight, depth: 0.3 }, scene);
+      bwR.position = new BABYLON.Vector3((roomWidth - 3.3) / 4 + 1.65, roomHeight / 2, -roomLength / 2);
+      bwR.material = materials.wallWood;
+      bwR.checkCollisions = true;
+      bwR.parent = roomGroup;
+
+      const bwT = BABYLON.MeshBuilder.CreateBox("bwT", { width: 3.3, height: roomHeight - 4.5, depth: 0.3 }, scene);
+      bwT.position = new BABYLON.Vector3(0, 4.5 + (roomHeight - 4.5) / 2, -roomLength / 2);
+      bwT.material = materials.wallWood;
+      bwT.checkCollisions = true;
+      bwT.parent = roomGroup;
+
+      buildBrokenElevator(roomGroup, new BABYLON.Vector3(0, 0, -roomLength / 2 + 0.15));
+
+      const leftWall = BABYLON.MeshBuilder.CreateBox("lw", { width: 0.3, height: roomHeight, depth: roomLength }, scene);
+      leftWall.position = new BABYLON.Vector3(-roomWidth / 2, roomHeight / 2, 0);
+      leftWall.material = materials.wallWood;
+      leftWall.checkCollisions = true;
+      leftWall.parent = roomGroup;
+
+      const rightWall = BABYLON.MeshBuilder.CreateBox("rw", { width: 0.3, height: roomHeight, depth: roomLength }, scene);
+      rightWall.position = new BABYLON.Vector3(roomWidth / 2, roomHeight / 2, 0);
+      rightWall.material = materials.wallWood;
+      rightWall.checkCollisions = true;
+      rightWall.parent = roomGroup;
+
+      const fwL = BABYLON.MeshBuilder.CreateBox("fwL", { width: (roomWidth - 2.8) / 2, height: roomHeight, depth: 0.3 }, scene);
+      fwL.position = new BABYLON.Vector3(-(roomWidth - 2.8) / 4 - 1.4, roomHeight / 2, roomLength / 2);
+      fwL.material = materials.wallWood;
+      fwL.checkCollisions = true;
+      fwL.parent = roomGroup;
+
+      const fwR = BABYLON.MeshBuilder.CreateBox("fwR", { width: (roomWidth - 2.8) / 2, height: roomHeight, depth: 0.3 }, scene);
+      fwR.position = new BABYLON.Vector3((roomWidth - 2.8) / 4 + 1.4, roomHeight / 2, roomLength / 2);
+      fwR.material = materials.wallWood;
+      fwR.checkCollisions = true;
+      fwR.parent = roomGroup;
+
+      const fwT = BABYLON.MeshBuilder.CreateBox("fwT", { width: 2.8, height: roomHeight - 4.2, depth: 0.3 }, scene);
+      fwT.position = new BABYLON.Vector3(0, 4.2 + (roomHeight - 4.2) / 2, roomLength / 2);
+      fwT.material = materials.wallWood;
+      fwT.checkCollisions = true;
+      fwT.parent = roomGroup;
+
+      // SKYLIGHT WITH BLACK WOODEN GRID
+      const skylightW = 4.0, skylightL = 6.0;
+
+      const ceilFront = BABYLON.MeshBuilder.CreateBox("ceilF", { width: roomWidth, height: 0.2, depth: (roomLength - skylightL) / 2 }, scene);
+      ceilFront.position = new BABYLON.Vector3(0, roomHeight, (skylightL / 2) + (roomLength - skylightL) / 4);
+      ceilFront.material = materials.ceilingWood;
+      ceilFront.checkCollisions = true;
+      ceilFront.parent = roomGroup;
+
+      const ceilBack = BABYLON.MeshBuilder.CreateBox("ceilB", { width: roomWidth, height: 0.2, depth: (roomLength - skylightL) / 2 }, scene);
+      ceilBack.position = new BABYLON.Vector3(0, roomHeight, -(skylightL / 2) - (roomLength - skylightL) / 4);
+      ceilBack.material = materials.ceilingWood;
+      ceilBack.checkCollisions = true;
+      ceilBack.parent = roomGroup;
+
+      const ceilLeft = BABYLON.MeshBuilder.CreateBox("ceilL", { width: (roomWidth - skylightW) / 2, height: 0.2, depth: skylightL }, scene);
+      ceilLeft.position = new BABYLON.Vector3(-(skylightW / 2) - (roomWidth - skylightW) / 4, roomHeight, 0);
+      ceilLeft.material = materials.ceilingWood;
+      ceilLeft.checkCollisions = true;
+      ceilLeft.parent = roomGroup;
+
+      const ceilRight = BABYLON.MeshBuilder.CreateBox("ceilR", { width: (roomWidth - skylightW) / 2, height: 0.2, depth: skylightL }, scene);
+      ceilRight.position = new BABYLON.Vector3((skylightW / 2) + (roomWidth - skylightW) / 4, roomHeight, 0);
+      ceilRight.material = materials.ceilingWood;
+      ceilRight.checkCollisions = true;
+      ceilRight.parent = roomGroup;
+
+      const glassRoof = BABYLON.MeshBuilder.CreatePlane("glassRoof", { width: skylightW, height: skylightL }, scene);
+      glassRoof.rotation.x = Math.PI / 2;
+      glassRoof.position = new BABYLON.Vector3(0, roomHeight - 0.02, 0);
+      glassRoof.material = materials.glass;
+      glassRoof.parent = roomGroup;
+
+      // BLACK WOODEN GRID FRAME OVER SKYLIGHT
+      for (let x = -skylightW / 2 + 1.0; x <= skylightW / 2 - 0.5; x += 1.0) {
+        const gBeam = BABYLON.MeshBuilder.CreateBox("gBeamL", { width: 0.12, height: 0.12, depth: skylightL }, scene);
+        gBeam.position = new BABYLON.Vector3(x, roomHeight - 0.05, 0);
+        gBeam.material = materials.blackGrid;
+        gBeam.parent = roomGroup;
+      }
+      for (let z = -skylightL / 2 + 1.0; z <= skylightL / 2 - 0.5; z += 1.0) {
+        const gBeam = BABYLON.MeshBuilder.CreateBox("gBeamT", { width: skylightW, height: 0.12, depth: 0.12 }, scene);
+        gBeam.position = new BABYLON.Vector3(0, roomHeight - 0.05, z);
+        gBeam.material = materials.blackGrid;
+        gBeam.parent = roomGroup;
+      }
+
+      const skyPlane = BABYLON.MeshBuilder.CreatePlane("skyPlane", { width: skylightW + 10, height: skylightL + 10 }, scene);
+      skyPlane.rotation.x = Math.PI / 2;
+      skyPlane.position = new BABYLON.Vector3(0, roomHeight + 3.0, 0);
+      skyPlane.material = materials.sky;
+      skyPlane.parent = roomGroup;
+
+      const leftSofa = createSofa(roomGroup, new BABYLON.Vector3(-roomWidth / 2 + 1.2, 0.5, 0), roomLength - 6, false);
+      const rightSofa = createSofa(roomGroup, new BABYLON.Vector3(roomWidth / 2 - 1.2, 0.5, 0), roomLength - 6, true);
+
+      buildCornerTable(roomGroup, new BABYLON.Vector3(-roomWidth / 2 + 1.5, 0, -roomLength / 2 + 1.5), true);
+      buildCornerTable(roomGroup, new BABYLON.Vector3(roomWidth / 2 - 1.5, 0, -roomLength / 2 + 1.5), true);
+
+      interactables.push({
+        mesh: leftSofa,
+        type: 'sofa',
+        distance: 3.2,
+        prompt: "Sit on Sofa",
+        action: () => sitOnSofa(leftSofa, false)
+      });
+      interactables.push({
+        mesh: rightSofa,
+        type: 'sofa',
+        distance: 3.2,
+        prompt: "Sit on Sofa",
+        action: () => sitOnSofa(rightSofa, true)
+      });
+
+      buildDoor(roomGroup, new BABYLON.Vector3(0, 0, roomLength / 2), "A-000", 0);
+
+      activeRooms.push(roomGroup);
+    }
+
+    function createSofa(parent, pos, length, isRight) {
+      const sofaNode = new BABYLON.TransformNode("sofaNode", scene);
+      sofaNode.position = pos;
+      sofaNode.parent = parent;
+
+      const seat = BABYLON.MeshBuilder.CreateBox("seat", { width: 1.6, height: 0.6, depth: length }, scene);
+      seat.material = materials.sofa;
+      seat.checkCollisions = true;
+      seat.parent = sofaNode;
+
+      const back = BABYLON.MeshBuilder.CreateBox("back", { width: 0.35, height: 1.4, depth: length }, scene);
+      back.position = new BABYLON.Vector3(isRight ? 0.65 : -0.65, 0.4, 0);
+      back.material = materials.sofa;
+      back.checkCollisions = true;
+      back.parent = sofaNode;
+
+      return seat;
+    }
+
+    function buildDoor(parentRoom, localPos, signText, roomIndex) {
+      createWoodenDoorFrame(parentRoom, localPos);
+
+      const doorPivot = new BABYLON.TransformNode("doorPivot", scene);
+      doorPivot.position = localPos.add(new BABYLON.Vector3(-1.2, 0, 0));
+      doorPivot.parent = parentRoom;
+
+      const doorMesh = BABYLON.MeshBuilder.CreateBox("doorMesh", { width: 2.4, height: 4.0, depth: 0.15 }, scene);
+      doorMesh.position = new BABYLON.Vector3(1.2, 2.0, 0);
+      doorMesh.material = materials.doorWood;
+      doorMesh.checkCollisions = true;
+      doorMesh.parent = doorPivot;
+
+      const signMesh = BABYLON.MeshBuilder.CreateBox("signMesh", { width: 1.6, height: 0.6, depth: 0.08 }, scene);
+      signMesh.position = localPos.add(new BABYLON.Vector3(0, 4.85, -0.15));
+      signMesh.material = materials.plasticYellow;
+      signMesh.parent = parentRoom;
+
+      const dynamicTex = new BABYLON.DynamicTexture("signTex", { width: 256, height: 128 }, scene);
+      dynamicTex.drawText(signText, null, 80, "bold 60px Arial", "black", "#f39c12", true);
+      const signMat = new BABYLON.StandardMaterial("signMat", scene);
+      signMat.diffuseTexture = dynamicTex;
+      signMat.specularColor = new BABYLON.Color3(0, 0, 0);
+      signMesh.material = signMat;
+
+      let doorInteractionEntry = null;
+
+      doorInteractionEntry = {
+        mesh: doorMesh,
+        type: 'door',
+        distance: 3.5,
+        prompt: "Open Door",
+        action: () => {
+          const idx = interactables.indexOf(doorInteractionEntry);
+          if (idx !== -1) interactables.splice(idx, 1);
+          if (currentPromptTarget === doorInteractionEntry) {
+            currentPromptTarget = null;
+            document.getElementById('interactionPrompt').style.display = 'none';
+          }
+
+          BABYLON.Animation.CreateAndStartAnimation(
+            "doorOpen", doorPivot, "rotation.y", 30, 20, 0, -Math.PI / 2,
+            BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
+          );
+          doorMesh.checkCollisions = false;
+
+          if (playerState.currentRoomIndex === roomIndex) {
+            playerState.currentRoomIndex++;
+            generateNextRoom(parentRoom.position.z + localPos.z, playerState.currentRoomIndex);
+          }
+        }
+      };
+
+      interactables.push(doorInteractionEntry);
+    }
+
+    // ROOM GENERATOR WITH GREY WOOD CEILING & NO SHELF CLIPPING
+    function generateNextRoom(entryZ, roomIndex) {
+      const roomGroup = new BABYLON.TransformNode("room_" + roomIndex, scene);
+      
+      const roomType = Math.floor(Math.random() * 4);
+      let roomWidth = 12, roomLength = 18;
+
+      if (roomType === 1) { roomWidth = 10; roomLength = 22; }
+      else if (roomType === 2) { roomWidth = 16; roomLength = 20; }
+      else if (roomType === 3) { roomWidth = 12; roomLength = 16; }
+
+      const roomHeight = 6.0;
+      roomGroup.position = new BABYLON.Vector3(0, 0, entryZ + roomLength / 2);
+
+      const floor = BABYLON.MeshBuilder.CreatePlane("floor", { width: roomWidth, height: roomLength }, scene);
+      floor.rotation.x = Math.PI / 2;
+      floor.material = materials.carpet;
+      floor.checkCollisions = true;
+      floor.parent = roomGroup;
+
+      const ceiling = BABYLON.MeshBuilder.CreatePlane("ceil", { width: roomWidth, height: roomLength }, scene);
+      ceiling.rotation.x = -Math.PI / 2;
+      ceiling.position.y = roomHeight;
+      ceiling.material = materials.ceilingWood;
+      ceiling.checkCollisions = true;
+      ceiling.parent = roomGroup;
+
+      const lW = BABYLON.MeshBuilder.CreateBox("lW", { width: 0.3, height: roomHeight, depth: roomLength }, scene);
+      lW.position = new BABYLON.Vector3(-roomWidth / 2, roomHeight / 2, 0);
+      lW.material = materials.wallWood;
+      lW.checkCollisions = true;
+      lW.parent = roomGroup;
+
+      const rW = BABYLON.MeshBuilder.CreateBox("rW", { width: 0.3, height: roomHeight, depth: roomLength }, scene);
+      rW.position = new BABYLON.Vector3(roomWidth / 2, roomHeight / 2, 0);
+      rW.material = materials.wallWood;
+      rW.checkCollisions = true;
+      rW.parent = roomGroup;
+
+      const bwL = BABYLON.MeshBuilder.CreateBox("bwL", { width: (roomWidth - 2.8) / 2, height: roomHeight, depth: 0.3 }, scene);
+      bwL.position = new BABYLON.Vector3(-(roomWidth - 2.8) / 4 - 1.4, roomHeight / 2, -roomLength / 2);
+      bwL.material = materials.wallWood;
+      bwL.checkCollisions = true;
+      bwL.parent = roomGroup;
+
+      const bwR = BABYLON.MeshBuilder.CreateBox("bwR", { width: (roomWidth - 2.8) / 2, height: roomHeight, depth: 0.3 }, scene);
+      bwR.position = new BABYLON.Vector3((roomWidth - 2.8) / 4 + 1.4, roomHeight / 2, -roomLength / 2);
+      bwR.material = materials.wallWood;
+      bwR.checkCollisions = true;
+      bwR.parent = roomGroup;
+
+      const bwT = BABYLON.MeshBuilder.CreateBox("bwT", { width: 2.8, height: roomHeight - 4.2, depth: 0.3 }, scene);
+      bwT.position = new BABYLON.Vector3(0, 4.2 + (roomHeight - 4.2) / 2, -roomLength / 2);
+      bwT.material = materials.wallWood;
+      bwT.checkCollisions = true;
+      bwT.parent = roomGroup;
+
+      const fwL = BABYLON.MeshBuilder.CreateBox("fwL", { width: (roomWidth - 2.8) / 2, height: roomHeight, depth: 0.3 }, scene);
+      fwL.position = new BABYLON.Vector3(-(roomWidth - 2.8) / 4 - 1.4, roomHeight / 2, roomLength / 2);
+      fwL.material = materials.wallWood;
+      fwL.checkCollisions = true;
+      fwL.parent = roomGroup;
+
+      const fwR = BABYLON.MeshBuilder.CreateBox("fwR", { width: (roomWidth - 2.8) / 2, height: roomHeight, depth: 0.3 }, scene);
+      fwR.position = new BABYLON.Vector3((roomWidth - 2.8) / 4 + 1.4, roomHeight / 2, roomLength / 2);
+      fwR.material = materials.wallWood;
+      fwR.checkCollisions = true;
+      fwR.parent = roomGroup;
+
+      const fwT = BABYLON.MeshBuilder.CreateBox("fwT", { width: 2.8, height: roomHeight - 4.2, depth: 0.3 }, scene);
+      fwT.position = new BABYLON.Vector3(0, 4.2 + (roomHeight - 4.2) / 2, roomLength / 2);
+      fwT.material = materials.wallWood;
+      fwT.checkCollisions = true;
+      fwT.parent = roomGroup;
+
+      const signLabel = "A-" + String(roomIndex).padStart(3, '0');
+      buildDoor(roomGroup, new BABYLON.Vector3(0, 0, roomLength / 2), signLabel, roomIndex);
+
+      const surfaceSpawnLocations = [];
+      surfaceSpawnLocations.push(new BABYLON.Vector3((Math.random() - 0.5) * (roomWidth - 4), 0.15, (Math.random() - 0.5) * (roomLength - 4)));
+
+      const corner1 = buildCornerTable(roomGroup, new BABYLON.Vector3(-roomWidth / 2 + 1.2, 0, -roomLength / 2 + 1.2), Math.random() < 0.5);
+      const corner2 = buildCornerTable(roomGroup, new BABYLON.Vector3(roomWidth / 2 - 1.2, 0, -roomLength / 2 + 1.2), Math.random() < 0.5);
+      surfaceSpawnLocations.push(corner1.absolutePosition.add(new BABYLON.Vector3(0, 0.12, 0)));
+      surfaceSpawnLocations.push(corner2.absolutePosition.add(new BABYLON.Vector3(0, 0.12, 0)));
+
+      // Non-clipping furniture layouts
+      if (roomType === 0 || roomType === 2) {
+        const wTable1 = buildWallTable(roomGroup, new BABYLON.Vector3(-roomWidth / 2 + 1.1, 0, -2.5), Math.PI / 2);
+        surfaceSpawnLocations.push(wTable1.absolutePosition.add(new BABYLON.Vector3(0, 0.12, 0)));
+      }
+
+      if (roomType === 1 || roomType === 3) {
+        buildMetalLocker(roomGroup, new BABYLON.Vector3(roomWidth / 2 - 0.9, 0, -2.5), -Math.PI / 2);
+      }
+
+      if (roomType === 2 || roomType === 3) {
+        const rackShelves = buildWarehouseRack(roomGroup, new BABYLON.Vector3(-roomWidth / 2 + 1.1, 0, 3.0), Math.PI / 2);
+        rackShelves.forEach(sh => {
+          surfaceSpawnLocations.push(sh.absolutePosition.add(new BABYLON.Vector3(0, 0.12, 0)));
+        });
+      }
+
+      if (Math.random() < 0.15 && surfaceSpawnLocations.length > 0) {
+        const chosenLoc = surfaceSpawnLocations[Math.floor(Math.random() * surfaceSpawnLocations.length)];
+        buildBatteryPickup(roomGroup, chosenLoc);
+      }
+
+      const darknessFactor = Math.max(0.08, 0.65 - Math.floor(roomIndex / 8) * 0.1);
+      const roomLight = new BABYLON.PointLight("rLight_" + roomIndex, new BABYLON.Vector3(0, roomHeight - 1, 0), scene);
+      roomLight.intensity = darknessFactor;
+      roomLight.parent = roomGroup;
+
+      activeRooms.push(roomGroup);
+
+      if (activeRooms.length > 5) {
+        const oldRoom = activeRooms.shift();
+        oldRoom.dispose();
+      }
+    }
+
+    // SOFA ACTIONS WITH AUTOMATIC ROBLOX SEAT POSE
+    function sitOnSofa(sofaMesh, isRightSofa) {
+      if (playerState.isSitting) return;
+      playerState.isSitting = true;
+
+      const seatPos = sofaMesh.absolutePosition;
+      
+      // Face forward relative to the sofa orientation
+      camera.rotation.y = isRightSofa ? -Math.PI / 2 : Math.PI / 2;
+      camera.rotation.x = 0;
+
+      camera.position.set(seatPos.x, seatPos.y + 0.9, seatPos.z);
+      playerNode.position.set(seatPos.x, seatPos.y + 0.1, seatPos.z);
+      playerNode.rotation.y = camera.rotation.y;
+
+      // Lay legs flat on sofa & point arms straight out (Roblox Seat Pose)
+      lLegMesh.rotation.x = -Math.PI / 2;
+      rLegMesh.rotation.x = -Math.PI / 2;
+      lArmMesh.rotation.x = -Math.PI / 2;
+      rArmMesh.rotation.x = -Math.PI / 2;
+
+      document.getElementById('jumpBtn').style.display = 'flex';
+    }
+
+    function standUpFromSofa() {
+      if (!playerState.isSitting) return;
+      playerState.isSitting = false;
+
+      // Restore limbs back to normal standing orientation
+      lLegMesh.rotation.x = 0;
+      rLegMesh.rotation.x = 0;
+      lArmMesh.rotation.x = 0;
+      rArmMesh.rotation.x = 0;
+
+      const yaw = camera.rotation.y;
+      const forwardDir = new BABYLON.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+
+      camera.position.addInPlace(forwardDir.scale(1.2));
+      camera.position.y = 2.2;
+
+      playerNode.position.x = camera.position.x;
+      playerNode.position.z = camera.position.z;
+
+      document.getElementById('jumpBtn').style.display = 'none';
+    }
+
+    // CONTROLS & BINDINGS
+    function setupControls() {
+      window.addEventListener('keydown', (e) => {
+        keysPressed[e.code] = true;
+
+        if (e.code === 'KeyE' && currentPromptTarget) {
+          currentPromptTarget.action();
+        }
+        if (e.code === 'Space' && playerState.isSitting) {
+          standUpFromSofa();
+        }
+        if (e.code === 'KeyF' && playerState.holdingFlashlight) {
+          toggleFlashlight();
+        }
+      });
+
+      window.addEventListener('keyup', (e) => {
+        keysPressed[e.code] = false;
+      });
+
+      canvas.addEventListener('click', () => {
+        if (!isMobile && document.pointerLockElement !== canvas) {
+          canvas.requestPointerLock();
+        }
+        if (playerState.holdingFlashlight) {
+          toggleFlashlight();
+        }
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (document.pointerLockElement === canvas) {
+          camera.rotation.y += e.movementX * 0.0022;
+          camera.rotation.x += e.movementY * 0.0022;
+          camera.rotation.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, camera.rotation.x));
+        }
+      });
+
+      if (isMobile) {
+        document.getElementById('mobileControls').style.display = 'block';
+        setupMobileTouchEvents();
+      }
+
+      document.getElementById('slotFlashlight').addEventListener('click', (e) => {
+        e.stopPropagation();
+        playerState.holdingFlashlight = !playerState.holdingFlashlight;
+        const slot = document.getElementById('slotFlashlight');
+        const batWidget = document.getElementById('batteryWidget');
+
+        if (playerState.holdingFlashlight) {
+          slot.classList.add('active');
+          flashlightMesh.setEnabled(true);
+          batWidget.classList.remove('hidden');
+          
+          if (playerState.batteryLevel > 0) {
+            playerState.flashlightOn = true;
+            flashlightSpot.intensity = 2.4;
+          }
+        } else {
+          slot.classList.remove('active');
+          flashlightMesh.setEnabled(false);
+          batWidget.classList.add('hidden');
+          playerState.flashlightOn = false;
+          flashlightSpot.intensity = 0;
+        }
+        updateBatteryUI();
+      });
+
+      document.getElementById('jumpBtn').addEventListener('click', standUpFromSofa);
+    }
+
+    function setupMobileTouchEvents() {
+      const joystickContainer = document.getElementById('joystickContainer');
+      const joystickKnob = document.getElementById('joystickKnob');
+      let joyTouchId = null;
+      let startX, startY;
+
+      joystickContainer.addEventListener('touchstart', (e) => {
+        const touch = e.changedTouches[0];
+        joyTouchId = touch.identifier;
+        startX = touch.clientX;
+        startY = touch.clientY;
+      });
+
+      joystickContainer.addEventListener('touchmove', (e) => {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          if (e.changedTouches[i].identifier === joyTouchId) {
+            const touch = e.changedTouches[i];
+            const dx = touch.clientX - startX;
+            const dy = touch.clientY - startY;
+            const dist = Math.min(40, Math.hypot(dx, dy));
+            const angle = Math.atan2(dy, dx);
+
+            const knobX = Math.cos(angle) * dist;
+            const knobY = Math.sin(angle) * dist;
+            joystickKnob.style.transform = `translate(${knobX}px, ${knobY}px)`;
+
+            moveInput.x = knobX / 40;
+            moveInput.z = -knobY / 40;
+          }
+        }
+      });
+
+      const resetJoystick = (e) => {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          if (e.changedTouches[i].identifier === joyTouchId) {
+            joyTouchId = null;
+            joystickKnob.style.transform = `translate(0px, 0px)`;
+            moveInput.x = 0;
+            moveInput.z = 0;
+          }
+        }
+      };
+
+      joystickContainer.addEventListener('touchend', resetJoystick);
+      joystickContainer.addEventListener('touchcancel', resetJoystick);
+
+      const touchZone = document.getElementById('touchCameraZone');
+      let lookTouchId = null;
+      let lastX, lastY;
+      let touchMoved = false;
+
+      touchZone.addEventListener('touchstart', (e) => {
+        const touch = e.changedTouches[0];
+        lookTouchId = touch.identifier;
+        lastX = touch.clientX;
+        lastY = touch.clientY;
+        touchMoved = false;
+      });
+
+      touchZone.addEventListener('touchmove', (e) => {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          if (e.changedTouches[i].identifier === lookTouchId) {
+            const touch = e.changedTouches[i];
+            const dx = touch.clientX - lastX;
+            const dy = touch.clientY - lastY;
+
+            if (Math.abs(dx) > 2 || Math.abs(dy) > 2) touchMoved = true;
+
+            camera.rotation.y += dx * 0.005;
+            camera.rotation.x += dy * 0.005;
+            camera.rotation.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, camera.rotation.x));
+
+            lastX = touch.clientX;
+            lastY = touch.clientY;
+          }
+        }
+      });
+
+      const resetLook = (e) => {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          if (e.changedTouches[i].identifier === lookTouchId) {
+            lookTouchId = null;
+            if (!touchMoved && playerState.holdingFlashlight) {
+              toggleFlashlight();
+            }
+          }
+        }
+      };
+
+      touchZone.addEventListener('touchend', resetLook);
+      touchZone.addEventListener('touchcancel', resetLook);
+    }
+
+    function toggleFlashlight() {
+      if (playerState.batteryLevel <= 0) {
+        playerState.flashlightOn = false;
+        flashlightSpot.intensity = 0;
+        return;
+      }
+      playerState.flashlightOn = !playerState.flashlightOn;
+      flashlightSpot.intensity = playerState.flashlightOn ? 2.4 : 0;
+    }
+
+    function updateBatteryUI() {
+      document.getElementById('batteryCount').innerText = "x" + playerState.batteriesCount;
+
+      const bars = [document.getElementById('bBar1'), document.getElementById('bBar2'), document.getElementById('bBar3')];
+      const level = Math.ceil(playerState.batteryLevel);
+
+      for (let i = 0; i < 3; i++) {
+        if (i < level) {
+          bars[i].classList.remove('empty');
+        } else {
+          bars[i].classList.add('empty');
+        }
+      }
+    }
+
+    // SLOWER BATTERY DRAIN SPEED
+    function processBatteryDrain(dt) {
+      if (playerState.flashlightOn && playerState.holdingFlashlight) {
+        playerState.batteryLevel -= dt * 0.018; // Drains ~3.3x slower
+
+        if (playerState.batteryLevel <= 0) {
+          playerState.batteryLevel = 0;
+          playerState.flashlightOn = false;
+
+          let flickers = 0;
+          const flickerInt = setInterval(() => {
+            flashlightSpot.intensity = (flickers % 2 === 0) ? 1.5 : 0;
+            flickers++;
+            if (flickers > 5) {
+              clearInterval(flickerInt);
+              flashlightSpot.intensity = 0;
+
+              if (playerState.batteriesCount > 0) {
+                playerState.batteriesCount--;
+                playerState.batteryLevel = 3.0;
+                playerState.flashlightOn = true;
+                flashlightSpot.intensity = 2.4;
+              }
+              updateBatteryUI();
+            }
+          }, 100);
+        }
+        updateBatteryUI();
+      }
+    }
+
+    // GAME LOOP WITH ROBLOX-STYLE WALKING ANIMATIONS
+    function gameUpdateLoop() {
+      const dt = engine.getDeltaTime() / 1000;
+
+      if (!playerState.isSitting) {
+        let inputX = moveInput.x;
+        let inputZ = moveInput.z;
+
+        if (keysPressed['KeyW']) inputZ = 1;
+        if (keysPressed['KeyS']) inputZ = -1;
+        if (keysPressed['KeyA']) inputX = -1;
+        if (keysPressed['KeyD']) inputX = 1;
+
+        if (inputX !== 0 || inputZ !== 0) {
+          const speed = 4.2 * dt;
+          const yaw = camera.rotation.y;
+
+          const forwardX = Math.sin(yaw);
+          const forwardZ = Math.cos(yaw);
+          const rightX = Math.cos(yaw);
+          const rightZ = -Math.sin(yaw);
+
+          let moveVectorX = (forwardX * inputZ) + (rightX * inputX);
+          let moveVectorZ = (forwardZ * inputZ) + (rightZ * inputX);
+
+          const mag = Math.hypot(moveVectorX, moveVectorZ);
+          if (mag > 0) {
+            moveVectorX = (moveVectorX / mag) * speed;
+            moveVectorZ = (moveVectorZ / mag) * speed;
+          }
+
+          camera.cameraDirection.x = moveVectorX;
+          camera.cameraDirection.z = moveVectorZ;
+
+          // Roblox Walking limb swing animation
+          walkAnimTime += dt * 9.5;
+          const swing = Math.sin(walkAnimTime) * 0.55;
+          lArmMesh.rotation.x = swing;
+          rArmMesh.rotation.x = -swing;
+          lLegMesh.rotation.x = -swing;
+          rLegMesh.rotation.x = swing;
+        } else {
+          camera.cameraDirection.x = 0;
+          camera.cameraDirection.z = 0;
+
+          // Smoothly reset limbs back to 0 when idle
+          lArmMesh.rotation.x *= 0.8;
+          rArmMesh.rotation.x *= 0.8;
+          lLegMesh.rotation.x *= 0.8;
+          rLegMesh.rotation.x *= 0.8;
+        }
+
+        playerNode.position.x = camera.position.x;
+        playerNode.position.z = camera.position.z;
+        playerNode.rotation.y = camera.rotation.y;
+      }
+
+      processBatteryDrain(dt);
+      checkInteractables();
+    }
+
+    // CIRCULAR INTERACT BUTTON WITH DYNAMIC ICONS
+    function checkInteractables() {
+      let closest = null;
+      let minDist = 999;
+
+      for (let i = interactables.length - 1; i >= 0; i--) {
+        const item = interactables[i];
+        if (item.mesh.isDisposed()) {
+          interactables.splice(i, 1);
+          continue;
+        }
+
+        const dist = BABYLON.Vector3.Distance(camera.position, item.mesh.absolutePosition);
+        if (dist <= item.distance && dist < minDist) {
+          minDist = dist;
+          closest = item;
+        }
+      }
+
+      const promptUI = document.getElementById('interactionPrompt');
+      if (closest) {
+        currentPromptTarget = closest;
+        promptUI.style.display = 'flex';
+
+        // Render black SVG icons based on target type
+        if (closest.type === 'door') {
+          promptUI.innerHTML = `<svg viewBox="0 0 24 24"><path fill="black" d="M19 19V5c0-1.1-.9-2-2-2H7c-1.1 0-2 .9-2 2v14H3v2h18v-2h-2zm-4-6c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z"/></svg>`;
+        } else if (closest.type === 'battery') {
+          promptUI.innerHTML = `<svg viewBox="0 0 24 24" style="transform: rotate(45deg);"><path fill="black" d="M16 20H8V6h2V4h4v2h2v14z"/></svg>`;
+        } else if (closest.type === 'sofa') {
+          promptUI.innerHTML = `<svg viewBox="0 0 24 24"><path fill="black" d="M4 10V7c0-1.1.9-2 2-2h12c1.1 0 2 .9 2 2v3c1.1 0 2 .9 2 2v5h-2v2h-2v-2H6v2H4v-2H2v-5c0-1.1.9-2 2-2z"/></svg>`;
+        } else {
+          promptUI.innerHTML = `<svg viewBox="0 0 24 24"><path fill="black" d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>`;
+        }
+      } else {
+        currentPromptTarget = null;
+        promptUI.style.display = 'none';
+      }
+    }
+
+    document.getElementById('interactionPrompt').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (currentPromptTarget) currentPromptTarget.action();
+    });
+
+    // MENUS
+    document.getElementById('playBtn').addEventListener('click', () => {
+      document.getElementById('mainMenu').classList.add('hidden');
+      document.getElementById('hud').classList.remove('hidden');
+      initGame();
+    });
+
+    document.getElementById('avatarBtn').addEventListener('click', () => {
+      document.getElementById('mainMenu').classList.add('hidden');
+      document.getElementById('avatarMenu').classList.remove('hidden');
+    });
+
+    document.getElementById('saveAvatarBtn').addEventListener('click', () => {
+      playerState.colors.head = document.getElementById('colHead').value;
+      playerState.colors.torso = document.getElementById('colTorso').value;
+      playerState.colors.lArm = document.getElementById('colLArm').value;
+      playerState.colors.rArm = document.getElementById('colRArm').value;
+      playerState.colors.lLeg = document.getElementById('colLLeg').value;
+      playerState.colors.rLeg = document.getElementById('colRLeg').value;
+
+      if (avatarMaterials.head) applyAvatarColors();
+
+      document.getElementById('avatarMenu').classList.add('hidden');
+      document.getElementById('mainMenu').classList.remove('hidden');
+    });
+
+    window.addEventListener('resize', () => engine.resize());
+  </script>
+</body>
+</html>
