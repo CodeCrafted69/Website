@@ -1005,6 +1005,7 @@
     let radioMasterGain = null;
     let radioEchoFilter = null;
     let radioFeedback = null;
+    let radioLoopTimer = null;
 
     function setupRadioAudio(worldPosition) {
       const ctx = ensureAudioContext();
@@ -1012,7 +1013,7 @@
       radioNodePosition.copyFrom(worldPosition);
 
       radioAudio = new Audio("Radio_Static.mp3");
-      radioAudio.loop = true;
+      radioAudio.loop = false;
       radioAudio.preload = "auto";
       radioAudio.volume = 1;
 
@@ -1051,7 +1052,22 @@
       radioFeedback.connect(radioDelay);
 
       radioMasterGain.connect(ctx.destination);
-      radioAudio.play().catch(() => {});
+
+      // Only use the first 2 seconds of the radio recording, then loop back
+      // to the beginning for a short, repeating static burst.
+      const playRadioSegment = () => {
+        if (!radioAudio) return;
+        radioAudio.currentTime = 0;
+        radioAudio.play().catch(() => {});
+        if (radioLoopTimer) clearTimeout(radioLoopTimer);
+        radioLoopTimer = setTimeout(() => {
+          if (!radioAudio) return;
+          radioAudio.pause();
+          radioAudio.currentTime = 0;
+          playRadioSegment();
+        }, 2000);
+      };
+      playRadioSegment();
     }
 
     function updateRadioAudio() {
@@ -1101,9 +1117,10 @@
         feedback = ctx.createGain();
         echoFilter = ctx.createBiquadFilter();
 
-        dryGain.gain.value = 0.54;
-        echoGain.gain.value = 0.24;
-        master.gain.value = 0.78;
+        // The opening 1.2 seconds are intentionally subdued and almost dry.
+        dryGain.gain.value = 0.16;
+        echoGain.gain.value = 0.025;
+        master.gain.value = 0.46;
         delay.delayTime.value = 0.22;
         feedback.gain.value = 0.20;
         echoFilter.type = "lowpass";
@@ -1125,6 +1142,13 @@
         audio.play().catch(() => {});
         setTimeout(() => {
           audio.pause();
+
+          // Once the 1.2-second quiet introduction has finished, the resumed
+          // section uses the fuller door sound and a more audible echo.
+          dryGain.gain.value = 0.54;
+          echoGain.gain.value = 0.24;
+          master.gain.value = 0.78;
+
           // Mechanical pause before the second part of the sound.
           setTimeout(() => {
             const begin = () => {
@@ -1135,7 +1159,7 @@
             audio.addEventListener("play", begin, {once:true});
             audio.play().catch(() => {});
           }, 420);
-        }, 1000);
+        }, 1200);
       }, {once:true});
       audio.load();
     }
